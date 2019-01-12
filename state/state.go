@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"sync"
 
-	"bitbucket.org/clagraff/yawning/components"
-	"bitbucket.org/clagraff/yawning/entities"
+	"github.com/clagraff/devoid/components"
+	"github.com/clagraff/devoid/entities"
 
 	errs "github.com/go-errors/errors"
 	uuid "github.com/satori/go.uuid"

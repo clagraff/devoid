@@ -1,7 +1,7 @@
 package pubsub
 
 import (
-	"bitbucket.org/clagraff/yawning/mutators"
+	"github.com/clagraff/devoid/mutators"
 )
 
 type Notification struct {

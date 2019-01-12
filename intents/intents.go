@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"math"
 
-	"bitbucket.org/clagraff/yawning/components"
-	"bitbucket.org/clagraff/yawning/entities"
-	"bitbucket.org/clagraff/yawning/mutators"
-	"bitbucket.org/clagraff/yawning/pubsub"
-	"bitbucket.org/clagraff/yawning/state"
+	"github.com/clagraff/devoid/components"
+	"github.com/clagraff/devoid/entities"
+	"github.com/clagraff/devoid/mutators"
+	"github.com/clagraff/devoid/pubsub"
+	"github.com/clagraff/devoid/state"
 
 	errs "github.com/go-errors/errors"
 	uuid "github.com/satori/go.uuid"

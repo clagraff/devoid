@@ -1,7 +1,7 @@
 package entities
 
 import (
-	"bitbucket.org/clagraff/yawning/components"
+	"github.com/clagraff/devoid/components"
 
 	uuid "github.com/satori/go.uuid"
 )

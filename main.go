@@ -6,11 +6,11 @@ import (
 	"math/rand"
 	"time"
 
-	"bitbucket.org/clagraff/yawning/client"
-	"bitbucket.org/clagraff/yawning/intents"
-	"bitbucket.org/clagraff/yawning/network"
-	"bitbucket.org/clagraff/yawning/server"
-	"bitbucket.org/clagraff/yawning/state"
+	"github.com/clagraff/devoid/client"
+	"github.com/clagraff/devoid/intents"
+	"github.com/clagraff/devoid/network"
+	"github.com/clagraff/devoid/server"
+	"github.com/clagraff/devoid/state"
 
 	errs "github.com/go-errors/errors"
 	uuid "github.com/satori/go.uuid"

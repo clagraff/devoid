@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	"bitbucket.org/clagraff/yawning/components"
-	"bitbucket.org/clagraff/yawning/intents"
-	"bitbucket.org/clagraff/yawning/mutators"
-	"bitbucket.org/clagraff/yawning/network"
-	"bitbucket.org/clagraff/yawning/state"
+	"github.com/clagraff/devoid/components"
+	"github.com/clagraff/devoid/intents"
+	"github.com/clagraff/devoid/mutators"
+	"github.com/clagraff/devoid/network"
+	"github.com/clagraff/devoid/state"
 
 	termbox "github.com/nsf/termbox-go"
 	uuid "github.com/satori/go.uuid"
