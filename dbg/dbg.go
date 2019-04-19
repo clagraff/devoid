@@ -54,7 +54,6 @@ func log(level int, format string, args ...interface{}) {
 	name := runtime.FuncForPC(pc).Name()
 	parts := strings.Split(name, "/")
 
-	fmt.Println("LEVEL FLKAG", *levelFlag)
 	if level >= *levelFlag {
 		msg := fmt.Sprintf(format, args...)
 		fmt.Printf(
