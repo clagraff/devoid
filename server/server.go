@@ -3,7 +3,6 @@ package server
 import (
 	"fmt"
 
-	"github.com/clagraff/devoid/dbg"
 	"github.com/clagraff/devoid/intents"
 	"github.com/clagraff/devoid/mutators"
 	"github.com/clagraff/devoid/network"
@@ -43,7 +42,6 @@ func Serve(state *state.State, tunnels chan network.Tunnel) {
 		nil,
 	)
 
-	dbg.Info("Server is serving")
 	select {}
 }
 
@@ -164,7 +162,7 @@ func handleNotification(
 	currentSubs, ok = subscribers[notification.Type]
 
 	if !ok {
-		dbg.Warn("no subscribers to %T%+v", notification.Type, notification.Type)
+		fmt.Printf("no subscribers to %T%+v\n", notification.Type, notification.Type)
 		return
 
 	}
@@ -180,7 +178,7 @@ func handleNotification(
 			)
 
 			if len(currentSubs) == 0 {
-				dbg.Debug("no more subscribers for %T", notification.Type)
+				fmt.Printf("no more subscribers for %T\n", notification.Type)
 				delete(subscribers, notification.Type)
 			}
 		}
@@ -188,7 +186,7 @@ func handleNotification(
 }
 
 func handleMutator(state *state.State, mutator mutators.Mutator) {
-	dbg.Trace("handling mutator %T", mutator)
+	fmt.Printf("handling mutator %T\n", mutator)
 	mutator.Mutate(state)
 }
 
@@ -200,8 +198,8 @@ func handleIntents(
 	for intent := range queue {
 		notifications := handleIntent(state, intent)
 		for _, notification := range notifications {
-			dbg.Trace(
-				"sending notification on %T for intent %T",
+			fmt.Printf(
+				"sending notification on %T for intent %T\n",
 				notification.Type,
 				intent,
 			)
@@ -211,10 +209,10 @@ func handleIntents(
 }
 
 func handleIntent(state *state.State, intent intents.Intent) []pubsub.Notification {
-	dbg.Trace("handling intent %T", intent)
+	fmt.Printf("handling intent %T\n", intent)
 	validationErrors := intent.Validate(state)
 	if len(validationErrors) != 0 {
-		dbg.Warn("intent %T had validation errors: %v", intent, validationErrors)
+		fmt.Printf("intent %T had validation errors: %v\n", intent, validationErrors)
 		return validationErrors
 	}
 
