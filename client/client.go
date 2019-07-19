@@ -72,7 +72,6 @@ func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intent
 				close(uiEvents)
 				return
 			} else if ev.Ch == 'i' {
-				//intentsQueue <- intents.Info{SourceID: entityID}
 				e, u, _ := state.ByPosition(components.Position{X: 3, Y: 7})
 				fmt.Println(e)
 				u()
