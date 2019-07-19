@@ -1,31 +1,36 @@
+# Devoid
+## Development
+`devoid` is split into two segments, the server and terminal client. Both reside
+within the same repo. 
 
+In order to contribute, you must get the code, setup a self-signed certificate
+(for running the server with TLS), and generate some basic data.
 
+**Get the Repo**
 
-Working on the server/server.go
+```bash
+go get github.com/clagraff/devoid
+```
 
-stuck on managing subscribers to notifications:
-What happens if a client subscibes to Position<1,2> because their Entity is there,
-and then a mutator _moves_ their entity to Position<4,5>?
+**Create `devoid` directory**
+```bash
+mkdir -p ~/.config/devoid
+```
 
-They no longer have a reason to be subscribed to Position<1,2>. In fact it may be
-a security/visibility issue if a client remains subscribed to notifications they
-should not be receiving.
+**Create cert for server**
 
-So somehow we need to know how to change subscriptions based on mutations for
-subscribers. Maybe. 
+```bash
+openssl req -new -x509 -sha256 -key ~/.config/devoid/devoid.key -out ~/.config/devoid/devoid.crt -days 3650
+```
 
-In this case, Position<1,2> may still need to be subscibed to if it is still visible
-by the client/entity.
+**Create Server Config**
 
-So basically, the following would need to happen:
+```bash
+touch server.json
+echo '{"certPath":"/home/USER/.config/devoid/devoid.crt","entitiesPath":"/home/USER/.config/devoid/entities.json","keyPath":"/home/USER/.config/devoid/devoid.key"}' > server.json
+```
 
-
-Move intent ->
-    MoveTo notification ->
-        recalculate source entity sighline subscriptions
-    MoveFrom notification ->
-        ??? profit ???
-
-
-Maybe just like we have Intents and Mutators we need Subscriptions or something.
-Structs whose purpose is to recalculate which subscriptions needed to be added/removed/updated.
+**Create Entities**
+```bash
+echo '[{"ID":"7e874935-c241-4a40-8c71-54ac6d6c3eff","Position":{"X":3,"Y":7},"Spatial":{"OccupiesPosition":true,"Stackable":false}},{"ID":"8e50e77b-dca9-4cb8-b228-c127b04442e7","Position":{"X":5,"Y":1},"Spatial":{"OccupiesPosition":true,"Stackable":false}}]' > entities.go
+```
