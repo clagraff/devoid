@@ -33,6 +33,8 @@ func Unmarshal(kind string, bytes []byte) (Intent, error) {
 		infoIntent := Info{}
 		err = json.Unmarshal(bytes, &infoIntent)
 		intent = infoIntent
+	default:
+		return nil, errs.New("invalid intent kind")
 	}
 
 	if err == nil {
