@@ -1,5 +1,0 @@
-{
-    "certPath": "/home/clagraff/selfsigned.crt",
-    "entitiesPath": "/home/clagraff/devoid_entities.json",
-    "keyPath": "/home/clagraff/selfsigned.key"
-}
