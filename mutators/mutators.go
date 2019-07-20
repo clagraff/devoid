@@ -2,6 +2,7 @@ package mutators
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/clagraff/devoid/components"
 	"github.com/clagraff/devoid/entities"
@@ -51,7 +52,12 @@ type MoveTo struct {
 func (moveTo MoveTo) Mutate(state *state.State) {
 	sourceEntity, unlock, ok := state.ByID(moveTo.SourceID)
 	if !ok {
-		panic("shit could not unlcok entity")
+		panic(
+			fmt.Sprintf(
+				"failed to aquire entity by ID: %s",
+				moveTo.SourceID,
+			),
+		)
 	}
 	defer unlock()
 
