@@ -52,3 +52,5 @@ echo '{"clientID":"7e874935-c241-4a40-8c71-54ac6d6c3eff","entityId":"7e874935-c2
 ```bash
 go run cmd/client/main.go ~/.config/devoid/client.json
 ```
+
+![](.github/layer_diagram.png)
