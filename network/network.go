@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"reflect"
@@ -196,8 +197,9 @@ func (s Server) receive(conn net.Conn, tunnel Tunnel) {
 				break
 			}
 			tunnel.Closed <- struct{}{}
-			//panic(errs.New(err))
-			fmt.Println(errs.New(err))
+			if err != io.EOF {
+				panic(err)
+			}
 			return
 		}
 		rawMessage = rawMessage[:len(rawMessage)-1]
@@ -219,17 +221,20 @@ func (s Server) send(conn net.Conn, tunnel Tunnel) {
 		rawMessage, err := json.Marshal(message)
 		if err != nil {
 			tunnel.Closed <- struct{}{}
-			panic(errs.New(err))
+			fmt.Println("err mashalling outgoing TCP message", err)
+			return
 		}
 
 		if _, err = conn.Write(rawMessage); err != nil {
 			tunnel.Closed <- struct{}{}
-			panic(errs.New(err))
+			fmt.Println("error writing outgoing TCP message", err)
+			return
 		}
 
 		if _, err = conn.Write([]byte{delimiter()}); err != nil {
 			tunnel.Closed <- struct{}{}
-			panic(errs.New(err))
+			fmt.Println("err writing TCP message delimiter", err)
+			return
 		}
 
 		conn.SetDeadline(time.Now().Add(2 * time.Minute))
