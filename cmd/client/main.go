@@ -16,6 +16,7 @@ import (
 )
 
 type clientConfig struct {
+	CertPath string `json:"certPath"`
 	ClientID uuid.UUID
 	EntityID uuid.UUID
 }
@@ -37,7 +38,7 @@ func loadClientConfig(path string) clientConfig {
 }
 
 func run(cfg clientConfig) {
-	info := network.MakeConnInfo("localhost", 8080, cfg.ClientID, "/home/clagraff/.config/devoid/devoid.crt", "")
+	info := network.MakeConnInfo("localhost", 8080, cfg.ClientID, cfg.CertPath, "")
 	c := network.NewClient(info)
 	closeFn, tunnel, err := c.Dial()
 	if err != nil {
