@@ -210,11 +210,5 @@ func handleIntents(
 
 func handleIntent(state *state.State, intent intents.Intent) []pubsub.Notification {
 	fmt.Printf("handling intent %T\n", intent)
-	validationErrors := intent.Validate(state)
-	if len(validationErrors) != 0 {
-		fmt.Printf("intent %T had validation errors: %v\n", intent, validationErrors)
-		return validationErrors
-	}
-
 	return intent.Compute(state)
 }

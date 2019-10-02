@@ -15,8 +15,6 @@ import (
 )
 
 type Intent interface {
-	Validate(*state.State) []pubsub.Notification
-
 	Compute(*state.State) []pubsub.Notification
 }
 
@@ -49,7 +47,7 @@ type Move struct {
 	Position components.Position
 }
 
-func (move Move) Validate(state *state.State) []pubsub.Notification {
+func (move Move) Compute(state *state.State) []pubsub.Notification {
 	sourceEntity, unlock, ok := state.ByID(move.SourceID)
 	if !ok {
 		panic("could not locate entity")
@@ -70,20 +68,10 @@ func (move Move) Validate(state *state.State) []pubsub.Notification {
 	defer unlockPos()
 
 	for _, entity := range entitiesAtPosition {
-		if entity.Spatial.OccupiesPosition {
-			panic(errs.Errorf("cannot Move to occupied Position"))
+		if !entity.Spatial.Stackable {
+			return nil // cannot move
 		}
 	}
-
-	return nil
-}
-
-func (move Move) Compute(state *state.State) []pubsub.Notification {
-	sourceEntity, unlock, ok := state.ByID(move.SourceID)
-	if !ok {
-		panic("shit didnt work bro")
-	}
-	defer unlock()
 
 	moveTo := mutators.MoveTo{
 		SourceID: move.SourceID,
@@ -120,8 +108,6 @@ func (move Move) Compute(state *state.State) []pubsub.Notification {
 type Info struct {
 	SourceID uuid.UUID
 }
-
-func (info Info) Validate(_ *state.State) []pubsub.Notification { return nil }
 
 func (info Info) Compute(state *state.State) []pubsub.Notification {
 	sourceEntity, unlock, ok := state.ByID(info.SourceID)

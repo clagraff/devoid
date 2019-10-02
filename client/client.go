@@ -85,6 +85,10 @@ func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intent
 							Y: entity.Position.Y - 1,
 						},
 					}
+					intentsQueue <- intents.Perceive{
+						SourceID: entityID,
+					}
+
 					unlock()
 				}
 			} else if ev.Key == termbox.KeyArrowDown {
