@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"runtime/trace"
 
 	"github.com/clagraff/devoid/network"
 	"github.com/clagraff/devoid/server"
@@ -38,7 +37,6 @@ func loadServerConfig(path string) serverConfig {
 }
 
 func run(cfg serverConfig) {
-	//defer profile.Start(profile.CPUProfile).Stop()
 	info := network.MakeConnInfo("localhost", 8080, network.MakeUUID(),
 		cfg.CertPath, cfg.KeyPath)
 
@@ -68,18 +66,6 @@ func run(cfg serverConfig) {
 }
 
 func main() {
-	f, err := os.Create("trace.out")
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
-	err = trace.Start(f)
-	if err != nil {
-		panic(err)
-	}
-	defer trace.Stop()
-
 	if len(os.Args) != 2 {
 		panic("must specify path to server config")
 	}

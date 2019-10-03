@@ -15,7 +15,7 @@ import (
 )
 
 type Intent interface {
-	Compute(*state.State) []pubsub.Notification
+	Compute(*state.State) ([]mutators.Mutator, []pubsub.Notification)
 }
 
 func Unmarshal(kind string, bytes []byte) (Intent, error) {
@@ -52,7 +52,7 @@ type Move struct {
 	Position components.Position
 }
 
-func (move Move) Compute(state *state.State) []pubsub.Notification {
+func (move Move) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
 	sourceEntity, unlock, ok := state.ByID(move.SourceID)
 	if !ok {
 		panic("could not locate entity")
@@ -74,7 +74,7 @@ func (move Move) Compute(state *state.State) []pubsub.Notification {
 
 	for _, entity := range entitiesAtPosition {
 		if !entity.Spatial.Stackable {
-			return nil // cannot move
+			return nil, nil // cannot move
 		}
 	}
 
@@ -88,6 +88,7 @@ func (move Move) Compute(state *state.State) []pubsub.Notification {
 		Position: sourceEntity.Position,
 	}
 
+	serverMutations := []mutators.Mutator{moveTo, moveFrom}
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
 			Type:     move.Position,
@@ -98,23 +99,19 @@ func (move Move) Compute(state *state.State) []pubsub.Notification {
 			Mutators: []mutators.Mutator{moveFrom},
 		},
 		pubsub.Notification{
-			Type:     nil,
-			Mutators: []mutators.Mutator{moveTo, moveFrom},
-		},
-		pubsub.Notification{
 			Type:     sourceEntity.ID,
 			Mutators: []mutators.Mutator{moveTo, moveFrom},
 		},
 	}
 
-	return notifications
+	return serverMutations, notifications
 }
 
 type Info struct {
 	SourceID uuid.UUID
 }
 
-func (info Info) Compute(state *state.State) []pubsub.Notification {
+func (info Info) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
 	sourceEntity, unlock, ok := state.ByID(info.SourceID)
 	if !ok {
 		panic("compute info went wrong")
@@ -132,16 +129,14 @@ func (info Info) Compute(state *state.State) []pubsub.Notification {
 		},
 	}
 
-	return notifications
+	return nil, notifications
 }
 
 type Perceive struct {
 	SourceID uuid.UUID
 }
 
-func (intent Perceive) Validate(_ *state.State) []pubsub.Notification { return nil }
-
-func (intent Perceive) Compute(state *state.State) []pubsub.Notification {
+func (intent Perceive) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
 	sourceEntity, unlock, ok := state.ByID(intent.SourceID)
 	if !ok {
 		panic("compute perceive went wrong")
@@ -177,9 +172,13 @@ func (intent Perceive) Compute(state *state.State) []pubsub.Notification {
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
 			Type:     intent.SourceID,
+			Mutators: []mutators.Mutator{mutators.ClearAllEntities{}},
+		},
+		pubsub.Notification{
+			Type:     intent.SourceID,
 			Mutators: muts,
 		},
 	}
 
-	return notifications
+	return nil, notifications
 }

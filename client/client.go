@@ -78,53 +78,65 @@ func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intent
 			} else if ev.Key == termbox.KeyArrowUp {
 				entity, unlock, ok := state.ByID(entityID)
 				if ok {
-					intentsQueue <- intents.Move{
-						SourceID: entityID,
-						Position: components.Position{
-							X: entity.Position.X,
-							Y: entity.Position.Y - 1,
+					requestMove(
+						intentsQueue,
+						intents.Move{
+							SourceID: entityID,
+							Position: components.Position{
+								X: entity.Position.X,
+								Y: entity.Position.Y - 1,
+							},
 						},
-					}
-					intentsQueue <- intents.Perceive{
-						SourceID: entityID,
-					}
+					)
 
 					unlock()
 				}
 			} else if ev.Key == termbox.KeyArrowDown {
 				entity, unlock, ok := state.ByID(entityID)
 				if ok {
-					intentsQueue <- intents.Move{
-						SourceID: entityID,
-						Position: components.Position{
-							X: entity.Position.X,
-							Y: entity.Position.Y + 1,
+					requestMove(
+						intentsQueue,
+						intents.Move{
+							SourceID: entityID,
+							Position: components.Position{
+								X: entity.Position.X,
+								Y: entity.Position.Y + 1,
+							},
 						},
-					}
+					)
+
 					unlock()
 				}
 			} else if ev.Key == termbox.KeyArrowLeft {
 				entity, unlock, ok := state.ByID(entityID)
 				if ok {
-					intentsQueue <- intents.Move{
-						SourceID: entityID,
-						Position: components.Position{
-							X: entity.Position.X - 1,
-							Y: entity.Position.Y,
+					requestMove(
+						intentsQueue,
+						intents.Move{
+							SourceID: entityID,
+							Position: components.Position{
+								X: entity.Position.X - 1,
+								Y: entity.Position.Y,
+							},
 						},
-					}
+					)
+
 					unlock()
 				}
 			} else if ev.Key == termbox.KeyArrowRight {
 				entity, unlock, ok := state.ByID(entityID)
 				if ok {
-					intentsQueue <- intents.Move{
-						SourceID: entityID,
-						Position: components.Position{
-							X: entity.Position.X + 1,
-							Y: entity.Position.Y,
+					requestMove(
+						intentsQueue,
+						intents.Move{
+							SourceID: entityID,
+							Position: components.Position{
+								X: entity.Position.X + 1,
+								Y: entity.Position.Y,
+							},
 						},
-					}
+					)
+
 					unlock()
 				}
 			} else if ev.Ch == 'f' {
@@ -137,6 +149,8 @@ func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intent
 							Y: entity.Position.Y + 1,
 						},
 					}
+					intentsQueue <- intents.Perceive{SourceID: entityID}
+
 					unlock()
 				}
 			}
@@ -226,5 +240,12 @@ func handleIntents(
 			serverID,
 			intent,
 		)
+	}
+}
+
+func requestMove(queue chan intents.Intent, intent intents.Move) {
+	queue <- intent
+	queue <- intents.Perceive{
+		SourceID: intent.SourceID,
 	}
 }

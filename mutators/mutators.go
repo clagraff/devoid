@@ -33,6 +33,10 @@ func Unmarshal(kind string, bytes []byte) (Mutator, error) {
 		setEntityMutator := SetEntity{}
 		err = json.Unmarshal(bytes, &setEntityMutator)
 		mutator = setEntityMutator
+	case "mutators.ClearAllEntities":
+		mut := ClearAllEntities{}
+		err = json.Unmarshal(bytes, &mut)
+		mutator = mut
 	default:
 		return nil, errs.Errorf("invalid mutator kind: %s", kind)
 	}
@@ -84,8 +88,8 @@ func (setEntity SetEntity) Mutate(state *state.State) {
 	state.Upsert(&setEntity.Entity)
 }
 
-type ClearAllEntity struct{}
+type ClearAllEntities struct{}
 
-func (_ ClearAllEntity) Mutate(state *state.State) {
+func (_ ClearAllEntities) Mutate(state *state.State) {
 	state.DeleteAll()
 }

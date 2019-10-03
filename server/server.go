@@ -16,39 +16,17 @@ func Serve(state *state.State, tunnels chan network.Tunnel) {
 	intentsQueue := make(chan intents.Intent, 100)
 	notificationsQueue := make(chan pubsub.Notification, 100)
 	messagesQueue := make(chan network.Message, 100)
-	mutatorsQueue := make(chan mutators.Mutator, 100)
 	subscriberQueue := make(chan pubsub.Subscriber, 100)
 
-	go handleMutators(state, mutatorsQueue)
 	go handleTunnels(state, tunnels, messagesQueue, intentsQueue, subscriberQueue)
 	go handleIntents(state, intentsQueue, notificationsQueue)
 	go handleNotifications(
 		notificationsQueue,
 		messagesQueue,
 		subscriberQueue,
-		mutatorsQueue,
-	)
-
-	notify := func(notification pubsub.Notification) bool {
-		for _, mutator := range notification.Mutators {
-			mutatorsQueue <- mutator
-		}
-
-		return true
-	}
-
-	subscriberQueue <- pubsub.MakeSubscriber(
-		notify,
-		nil,
 	)
 
 	select {}
-}
-
-func handleMutators(state *state.State, queue chan mutators.Mutator) {
-	for mutator := range queue {
-		handleMutator(state, mutator)
-	}
 }
 
 func handleTunnels(
@@ -119,7 +97,7 @@ func handleSubscribe(
 			},
 			entity.Position,
 			entity.ID,
-		),
+			nil),
 	}
 
 	for _, sub := range subscribers {
@@ -131,7 +109,6 @@ func handleNotifications(
 	queue chan pubsub.Notification,
 	messagesQueue chan network.Message,
 	subscriberQueue chan pubsub.Subscriber,
-	mutatorsQueue chan mutators.Mutator,
 ) {
 	subscribers := make(map[interface{}][]pubsub.Subscriber)
 
@@ -185,18 +162,17 @@ func handleNotification(
 	}
 }
 
-func handleMutator(state *state.State, mutator mutators.Mutator) {
-	fmt.Printf("handling mutator %T\n", mutator)
-	mutator.Mutate(state)
-}
-
 func handleIntents(
 	state *state.State,
 	queue chan intents.Intent,
 	notificationQueue chan pubsub.Notification,
 ) {
 	for intent := range queue {
-		notifications := handleIntent(state, intent)
+		serverMutations, notifications := handleIntent(state, intent)
+		for _, mutation := range serverMutations {
+			mutation.Mutate(state)
+		}
+
 		for _, notification := range notifications {
 			fmt.Printf(
 				"sending notification on %T for intent %T\n",
@@ -208,7 +184,7 @@ func handleIntents(
 	}
 }
 
-func handleIntent(state *state.State, intent intents.Intent) []pubsub.Notification {
+func handleIntent(state *state.State, intent intents.Intent) ([]mutators.Mutator, []pubsub.Notification) {
 	fmt.Printf("handling intent %T\n", intent)
 	return intent.Compute(state)
 }
