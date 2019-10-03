@@ -83,3 +83,9 @@ type SetEntity struct {
 func (setEntity SetEntity) Mutate(state *state.State) {
 	state.Upsert(&setEntity.Entity)
 }
+
+type ClearAllEntity struct{}
+
+func (_ ClearAllEntity) Mutate(state *state.State) {
+	state.DeleteAll()
+}

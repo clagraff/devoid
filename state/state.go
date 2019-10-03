@@ -108,6 +108,43 @@ func (locker *State) DeleteIDFromPosition(id uuid.UUID, position components.Posi
 	delete(locker.positions[position], id)
 }
 
+func (locker *State) DeleteAllEntities() {
+	locks := make([]*sync.Mutex, 0)
+
+	for id := range locker.entities {
+		lock := locker.idLocks[id]
+		lock.Lock()
+		locks = append(locks, lock)
+		delete(locker.entities, id)
+		delete(locker.idLocks, id)
+	}
+
+	for _, lock := range locks {
+		lock.Unlock()
+	}
+}
+
+func (locker *State) DeleteAllPositions() {
+	locks := make([]*sync.Mutex, 0)
+
+	for id := range locker.positions {
+		lock := locker.posLocks[id]
+		lock.Lock()
+		locks = append(locks, lock)
+		delete(locker.positions, id)
+		delete(locker.posLocks, id)
+	}
+
+	for _, lock := range locks {
+		lock.Unlock()
+	}
+}
+
+func (locker *State) DeleteAll() {
+	locker.DeleteAllEntities()
+	locker.DeleteAllPositions()
+}
+
 func (locker *State) ByID(id uuid.UUID) (*entities.Entity, func(), bool) {
 	lock, ok := locker.idLocks[id]
 	if !ok {
