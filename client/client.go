@@ -241,6 +241,7 @@ func moveTo(state *state.State, sourceID uuid.UUID, dir direction, queue chan in
 			SourceID: sourceID,
 			Position: targetPos,
 		}
+		queue <- intents.Perceive{SourceID: sourceID}
 	} else {
 		isPassable := true
 
@@ -263,10 +264,7 @@ func moveTo(state *state.State, sourceID uuid.UUID, dir direction, queue chan in
 				SourceID: sourceID,
 				Position: targetPos,
 			}
+			queue <- intents.Perceive{SourceID: sourceID}
 		}
-	}
-
-	queue <- intents.Perceive{
-		SourceID: sourceID,
 	}
 }
