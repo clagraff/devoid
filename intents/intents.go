@@ -15,9 +15,7 @@ import (
 )
 
 type Intent interface {
-	Validate(*state.State) []pubsub.Notification
-
-	Compute(*state.State) []pubsub.Notification
+	Compute(*state.State) ([]mutators.Mutator, []pubsub.Notification)
 }
 
 func Unmarshal(kind string, bytes []byte) (Intent, error) {
@@ -33,8 +31,20 @@ func Unmarshal(kind string, bytes []byte) (Intent, error) {
 		infoIntent := Info{}
 		err = json.Unmarshal(bytes, &infoIntent)
 		intent = infoIntent
+	case "intents.Perceive":
+		perceiveIntent := Perceive{}
+		err = json.Unmarshal(bytes, &perceiveIntent)
+		intent = perceiveIntent
+	case "intents.OpenSpatial":
+		openSpatialIntent := OpenSpatial{}
+		err = json.Unmarshal(bytes, &openSpatialIntent)
+		intent = openSpatialIntent
+	case "intents.CloseSpatial":
+		closeSpatialIntent := CloseSpatial{}
+		err = json.Unmarshal(bytes, &closeSpatialIntent)
+		intent = closeSpatialIntent
 	default:
-		return nil, errs.New("invalid intent kind")
+		return nil, errs.New("invalid intent kind: " + kind)
 	}
 
 	if err == nil {
@@ -49,7 +59,7 @@ type Move struct {
 	Position components.Position
 }
 
-func (move Move) Validate(state *state.State) []pubsub.Notification {
+func (move Move) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
 	sourceEntity, unlock, ok := state.ByID(move.SourceID)
 	if !ok {
 		panic("could not locate entity")
@@ -70,20 +80,10 @@ func (move Move) Validate(state *state.State) []pubsub.Notification {
 	defer unlockPos()
 
 	for _, entity := range entitiesAtPosition {
-		if entity.Spatial.OccupiesPosition {
-			panic(errs.Errorf("cannot Move to occupied Position"))
+		if !entity.Spatial.Stackable {
+			return nil, nil // cannot move
 		}
 	}
-
-	return nil
-}
-
-func (move Move) Compute(state *state.State) []pubsub.Notification {
-	sourceEntity, unlock, ok := state.ByID(move.SourceID)
-	if !ok {
-		panic("shit didnt work bro")
-	}
-	defer unlock()
 
 	moveTo := mutators.MoveTo{
 		SourceID: move.SourceID,
@@ -95,6 +95,7 @@ func (move Move) Compute(state *state.State) []pubsub.Notification {
 		Position: sourceEntity.Position,
 	}
 
+	serverMutations := []mutators.Mutator{moveTo, moveFrom}
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
 			Type:     move.Position,
@@ -105,25 +106,19 @@ func (move Move) Compute(state *state.State) []pubsub.Notification {
 			Mutators: []mutators.Mutator{moveFrom},
 		},
 		pubsub.Notification{
-			Type:     nil,
-			Mutators: []mutators.Mutator{moveTo, moveFrom},
-		},
-		pubsub.Notification{
 			Type:     sourceEntity.ID,
 			Mutators: []mutators.Mutator{moveTo, moveFrom},
 		},
 	}
 
-	return notifications
+	return serverMutations, notifications
 }
 
 type Info struct {
 	SourceID uuid.UUID
 }
 
-func (info Info) Validate(_ *state.State) []pubsub.Notification { return nil }
-
-func (info Info) Compute(state *state.State) []pubsub.Notification {
+func (info Info) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
 	sourceEntity, unlock, ok := state.ByID(info.SourceID)
 	if !ok {
 		panic("compute info went wrong")
@@ -141,16 +136,14 @@ func (info Info) Compute(state *state.State) []pubsub.Notification {
 		},
 	}
 
-	return notifications
+	return nil, notifications
 }
 
 type Perceive struct {
 	SourceID uuid.UUID
 }
 
-func (intent Perceive) Validate(_ *state.State) []pubsub.Notification { return nil }
-
-func (intent Perceive) Compute(state *state.State) []pubsub.Notification {
+func (intent Perceive) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
 	sourceEntity, unlock, ok := state.ByID(intent.SourceID)
 	if !ok {
 		panic("compute perceive went wrong")
@@ -186,9 +179,103 @@ func (intent Perceive) Compute(state *state.State) []pubsub.Notification {
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
 			Type:     intent.SourceID,
+			Mutators: []mutators.Mutator{mutators.ClearAllEntities{}},
+		},
+		pubsub.Notification{
+			Type:     intent.SourceID,
 			Mutators: muts,
 		},
 	}
 
-	return notifications
+	return nil, notifications
+}
+
+type OpenSpatial struct {
+	SourceID uuid.UUID
+	TargetID uuid.UUID
+}
+
+func (intent OpenSpatial) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
+	_, unlock, ok := state.ByID(intent.SourceID)
+	if !ok {
+		panic("compute info went wrong")
+	}
+	defer unlock()
+
+	targetEntity, unlock, ok := state.ByID(intent.TargetID)
+	if !ok {
+		panic("compute OpenSpatial went wrong")
+	}
+	defer unlock()
+
+	// If target is not toggleable, do nothing.
+	if !targetEntity.Spatial.Toggleable {
+		return nil, nil
+	}
+
+	// If target is already passable, do nothing.
+	if targetEntity.Spatial.Stackable {
+		return nil, nil
+	}
+
+	mutate := mutators.SetStackability{
+		Entity:       *targetEntity,
+		Stackability: true,
+	}
+
+	notifications := []pubsub.Notification{
+		pubsub.Notification{
+			Type:     intent.TargetID,
+			Mutators: []mutators.Mutator{mutate},
+		},
+		pubsub.Notification{
+			Type:     intent.SourceID,
+			Mutators: []mutators.Mutator{mutate},
+		},
+	}
+
+	return []mutators.Mutator{mutate}, notifications
+}
+
+type CloseSpatial struct {
+	SourceID uuid.UUID
+	TargetID uuid.UUID
+}
+
+func (intent CloseSpatial) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
+	sourceEntity, unlock, ok := state.ByID(intent.SourceID)
+	if !ok {
+		panic("compute info went wrong")
+	}
+	defer unlock()
+
+	targetEntity, unlock, ok := state.ByID(intent.TargetID)
+	if !ok {
+		panic("compute info went wrong")
+	}
+	defer unlock()
+
+	// If target is not toggleable, do nothing.
+	if !targetEntity.Spatial.Toggleable {
+		return nil, nil
+	}
+
+	// If target is already not passable, do nothing.
+	if !targetEntity.Spatial.Stackable {
+		return nil, nil
+	}
+
+	mutate := mutators.SetStackability{
+		Entity:       *sourceEntity,
+		Stackability: false,
+	}
+
+	notifications := []pubsub.Notification{
+		pubsub.Notification{
+			Type:     intent.TargetID,
+			Mutators: []mutators.Mutator{mutate},
+		},
+	}
+
+	return nil, notifications
 }

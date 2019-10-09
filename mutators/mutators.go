@@ -33,6 +33,14 @@ func Unmarshal(kind string, bytes []byte) (Mutator, error) {
 		setEntityMutator := SetEntity{}
 		err = json.Unmarshal(bytes, &setEntityMutator)
 		mutator = setEntityMutator
+	case "mutators.ClearAllEntities":
+		mut := ClearAllEntities{}
+		err = json.Unmarshal(bytes, &mut)
+		mutator = mut
+	case "mutators.SetStackability":
+		mut := SetStackability{}
+		err = json.Unmarshal(bytes, &mut)
+		mutator = mut
 	default:
 		return nil, errs.Errorf("invalid mutator kind: %s", kind)
 	}
@@ -82,4 +90,21 @@ type SetEntity struct {
 
 func (setEntity SetEntity) Mutate(state *state.State) {
 	state.Upsert(&setEntity.Entity)
+}
+
+type SetStackability struct {
+	Entity       entities.Entity
+	Stackability bool
+}
+
+func (m SetStackability) Mutate(state *state.State) {
+	entity := &m.Entity
+	entity.Spatial.Stackable = m.Stackability
+	state.Upsert(&m.Entity)
+}
+
+type ClearAllEntities struct{}
+
+func (_ ClearAllEntities) Mutate(state *state.State) {
+	state.DeleteAll()
 }

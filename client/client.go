@@ -41,6 +41,15 @@ func init() {
 	c.Y = 13
 }
 
+type direction int
+
+const (
+	up direction = iota
+	right
+	down
+	left
+)
+
 func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intentsQueue chan intents.Intent) {
 
 	messagesQueue := make(chan network.Message, 100)
@@ -76,53 +85,13 @@ func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intent
 				fmt.Println(e)
 				u()
 			} else if ev.Key == termbox.KeyArrowUp {
-				entity, unlock, ok := state.ByID(entityID)
-				if ok {
-					intentsQueue <- intents.Move{
-						SourceID: entityID,
-						Position: components.Position{
-							X: entity.Position.X,
-							Y: entity.Position.Y - 1,
-						},
-					}
-					unlock()
-				}
+				moveTo(state, entityID, up, intentsQueue)
 			} else if ev.Key == termbox.KeyArrowDown {
-				entity, unlock, ok := state.ByID(entityID)
-				if ok {
-					intentsQueue <- intents.Move{
-						SourceID: entityID,
-						Position: components.Position{
-							X: entity.Position.X,
-							Y: entity.Position.Y + 1,
-						},
-					}
-					unlock()
-				}
+				moveTo(state, entityID, down, intentsQueue)
 			} else if ev.Key == termbox.KeyArrowLeft {
-				entity, unlock, ok := state.ByID(entityID)
-				if ok {
-					intentsQueue <- intents.Move{
-						SourceID: entityID,
-						Position: components.Position{
-							X: entity.Position.X - 1,
-							Y: entity.Position.Y,
-						},
-					}
-					unlock()
-				}
+				moveTo(state, entityID, left, intentsQueue)
 			} else if ev.Key == termbox.KeyArrowRight {
-				entity, unlock, ok := state.ByID(entityID)
-				if ok {
-					intentsQueue <- intents.Move{
-						SourceID: entityID,
-						Position: components.Position{
-							X: entity.Position.X + 1,
-							Y: entity.Position.Y,
-						},
-					}
-					unlock()
-				}
+				moveTo(state, entityID, right, intentsQueue)
 			} else if ev.Ch == 'f' {
 				entity, unlock, ok := state.ByID(entityID)
 				if ok {
@@ -133,6 +102,8 @@ func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intent
 							Y: entity.Position.Y + 1,
 						},
 					}
+					intentsQueue <- intents.Perceive{SourceID: entityID}
+
 					unlock()
 				}
 			}
@@ -151,10 +122,20 @@ func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intent
 					panic("failed to render entity")
 				}
 
+				char := '@'
+				if entity.Spatial.Toggleable {
+					char = '+'
+					if entity.Spatial.Stackable {
+						char = '-'
+					}
+				} else if !uuid.Equal(entityID, entity.ID) {
+					char = '#'
+				}
+
 				termbox.SetCell(
 					entity.Position.X,
 					entity.Position.Y,
-					'@',
+					char,
 					termbox.ColorWhite,
 					termbox.ColorBlack,
 				)
@@ -222,5 +203,68 @@ func handleIntents(
 			serverID,
 			intent,
 		)
+	}
+}
+
+func moveTo(state *state.State, sourceID uuid.UUID, dir direction, queue chan intents.Intent) {
+	sourceEntity, sourceUnlock, ok := state.ByID(sourceID)
+	defer sourceUnlock()
+
+	if !ok {
+		return
+	}
+
+	x := sourceEntity.Position.X
+	y := sourceEntity.Position.Y
+
+	switch dir {
+	case up:
+		y--
+	case right:
+		x++
+	case down:
+		y++
+	case left:
+		x--
+	}
+
+	targetPos := components.Position{
+		X: x,
+		Y: y,
+	}
+
+	targetEntities, targetUnlock, ok := state.ByPosition(targetPos)
+	defer targetUnlock()
+
+	if !ok {
+		queue <- intents.Move{
+			SourceID: sourceID,
+			Position: targetPos,
+		}
+		queue <- intents.Perceive{SourceID: sourceID}
+	} else {
+		isPassable := true
+
+		for _, targetEntity := range targetEntities {
+			if !targetEntity.Spatial.Stackable {
+				isPassable = false
+				if !targetEntity.Spatial.Toggleable {
+					return
+				}
+
+				queue <- intents.OpenSpatial{
+					SourceID: sourceID,
+					TargetID: targetEntity.ID,
+				}
+			}
+		}
+
+		if isPassable {
+			queue <- intents.Move{
+				SourceID: sourceID,
+				Position: targetPos,
+			}
+			queue <- intents.Perceive{SourceID: sourceID}
+		}
 	}
 }

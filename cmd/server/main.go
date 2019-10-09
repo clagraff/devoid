@@ -37,7 +37,6 @@ func loadServerConfig(path string) serverConfig {
 }
 
 func run(cfg serverConfig) {
-	//defer profile.Start(profile.CPUProfile).Stop()
 	info := network.MakeConnInfo("localhost", 8080, network.MakeUUID(),
 		cfg.CertPath, cfg.KeyPath)
 
