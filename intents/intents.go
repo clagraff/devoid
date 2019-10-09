@@ -35,7 +35,14 @@ func Unmarshal(kind string, bytes []byte) (Intent, error) {
 		perceiveIntent := Perceive{}
 		err = json.Unmarshal(bytes, &perceiveIntent)
 		intent = perceiveIntent
-
+	case "intents.OpenSpatial":
+		openSpatialIntent := OpenSpatial{}
+		err = json.Unmarshal(bytes, &openSpatialIntent)
+		intent = openSpatialIntent
+	case "intents.CloseSpatial":
+		closeSpatialIntent := CloseSpatial{}
+		err = json.Unmarshal(bytes, &closeSpatialIntent)
+		intent = closeSpatialIntent
 	default:
 		return nil, errs.New("invalid intent kind: " + kind)
 	}
@@ -177,6 +184,96 @@ func (intent Perceive) Compute(state *state.State) ([]mutators.Mutator, []pubsub
 		pubsub.Notification{
 			Type:     intent.SourceID,
 			Mutators: muts,
+		},
+	}
+
+	return nil, notifications
+}
+
+type OpenSpatial struct {
+	SourceID uuid.UUID
+	TargetID uuid.UUID
+}
+
+func (intent OpenSpatial) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
+	_, unlock, ok := state.ByID(intent.SourceID)
+	if !ok {
+		panic("compute info went wrong")
+	}
+	defer unlock()
+
+	targetEntity, unlock, ok := state.ByID(intent.TargetID)
+	if !ok {
+		panic("compute OpenSpatial went wrong")
+	}
+	defer unlock()
+
+	// If target is not toggleable, do nothing.
+	if !targetEntity.Spatial.Toggleable {
+		return nil, nil
+	}
+
+	// If target is already passable, do nothing.
+	if targetEntity.Spatial.Stackable {
+		return nil, nil
+	}
+
+	mutate := mutators.SetStackability{
+		Entity:       *targetEntity,
+		Stackability: true,
+	}
+
+	notifications := []pubsub.Notification{
+		pubsub.Notification{
+			Type:     intent.TargetID,
+			Mutators: []mutators.Mutator{mutate},
+		},
+		pubsub.Notification{
+			Type:     intent.SourceID,
+			Mutators: []mutators.Mutator{mutate},
+		},
+	}
+
+	return []mutators.Mutator{mutate}, notifications
+}
+
+type CloseSpatial struct {
+	SourceID uuid.UUID
+	TargetID uuid.UUID
+}
+
+func (intent CloseSpatial) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
+	sourceEntity, unlock, ok := state.ByID(intent.SourceID)
+	if !ok {
+		panic("compute info went wrong")
+	}
+	defer unlock()
+
+	targetEntity, unlock, ok := state.ByID(intent.TargetID)
+	if !ok {
+		panic("compute info went wrong")
+	}
+	defer unlock()
+
+	// If target is not toggleable, do nothing.
+	if !targetEntity.Spatial.Toggleable {
+		return nil, nil
+	}
+
+	// If target is already not passable, do nothing.
+	if !targetEntity.Spatial.Stackable {
+		return nil, nil
+	}
+
+	mutate := mutators.SetStackability{
+		Entity:       *sourceEntity,
+		Stackability: false,
+	}
+
+	notifications := []pubsub.Notification{
+		pubsub.Notification{
+			Type:     intent.TargetID,
+			Mutators: []mutators.Mutator{mutate},
 		},
 	}
 
