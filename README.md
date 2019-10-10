@@ -1,4 +1,4 @@
-# Devoid
+# deVoid
 ## Development
 `devoid` is split into two segments, the server and terminal client. Both reside
 within the same repo. 
