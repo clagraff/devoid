@@ -76,7 +76,7 @@ type MoveFrom struct {
 }
 
 func (moveFrom MoveFrom) Mutate(locker *entities.Locker) {
-	locker.Delete(moveFrom.SourceID)
+	locker.DeleteFromPos(moveFrom.SourceID, moveFrom.Position)
 }
 
 type SetEntity struct {
@@ -95,7 +95,7 @@ type SetStackability struct {
 func (m SetStackability) Mutate(locker *entities.Locker) {
 	entity := m.Entity
 	entity.Spatial.Stackable = m.Stackability
-	locker.Set(m.Entity)
+	locker.Set(entity)
 }
 
 type ClearAllEntities struct{}

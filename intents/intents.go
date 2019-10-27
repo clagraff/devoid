@@ -2,7 +2,9 @@ package intents
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
+	"os"
 
 	"github.com/clagraff/devoid/components"
 	"github.com/clagraff/devoid/entities"
@@ -81,7 +83,8 @@ func (move Move) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.
 
 	for _, container := range containersAtPosition {
 		if container.Entity == sourceContainer.Entity {
-			panic("cannot move if already there")
+			continue
+			//panic("cannot move if already there")
 		}
 		container.Lock.RLock()
 		if !container.Entity.Spatial.Stackable {
@@ -154,7 +157,8 @@ type Perceive struct {
 func (intent Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
 	sourceContainer, err := locker.GetByID(intent.SourceID)
 	if err != nil {
-		panic("compute perceive went wrong")
+		fmt.Printf("%+v\n", err)
+		os.Exit(1)
 	}
 	sourceContainer.Lock.RLock()
 	sourceEntity := sourceContainer.Entity
@@ -178,11 +182,7 @@ func (intent Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []p
 			}
 
 			for _, container := range containers {
-				if container.Entity == sourceEntity {
-					continue
-				}
 				container.Lock.RLock()
-
 				muts = append(muts, mutators.SetEntity{Entity: *container.Entity})
 				container.Lock.RUnlock()
 			}

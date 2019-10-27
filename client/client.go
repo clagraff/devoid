@@ -1,6 +1,9 @@
 package client
 
 import (
+	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/clagraff/devoid/components"
@@ -49,7 +52,18 @@ const (
 	left
 )
 
+func logIt(i interface{}) {
+	log.Printf("%T: %+v\n", i, i)
+}
+
 func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, intentsQueue chan intents.Intent) {
+	f, err := os.OpenFile("client.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	defer f.Close()
+
+	log.SetOutput(f)
 
 	messagesQueue := make(chan network.Message, 100)
 	mutatorsQueue := make(chan mutators.Mutator, 100)
@@ -61,7 +75,7 @@ func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, i
 
 	go pollTerminalEvents(uiEvents)
 
-	err := termbox.Init()
+	err = termbox.Init()
 	if err != nil {
 		panic(err)
 	}
@@ -163,6 +177,7 @@ func handleTunnel(
 }
 
 func handleMutator(locker *entities.Locker, mutator mutators.Mutator) {
+	logIt(mutator)
 	if mutator != nil {
 		mutator.Mutate(locker)
 	} else {
@@ -177,6 +192,7 @@ func handleIntents(
 	messagesQueue chan network.Message,
 ) {
 	for intent := range queue {
+		logIt(intent)
 		messagesQueue <- network.MakeMessage(
 			serverID,
 			intent,
@@ -187,7 +203,8 @@ func handleIntents(
 func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue chan intents.Intent) {
 	sourceContainer, err := locker.GetByID(sourceID)
 	if err != nil {
-		panic("something went wrong")
+		fmt.Printf("%+v\n", err)
+		os.Exit(1)
 	}
 	sourceContainer.Lock.RLock()
 	defer sourceContainer.Lock.RUnlock()
@@ -221,34 +238,35 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 		}
 		queue <- intents.Perceive{SourceID: sourceID}
 		//panic(err)
-	}
+	} else {
 
-	isPassable := true
+		isPassable := true
 
-	for _, container := range containers {
-		container.Lock.RLock()
-		targetEntity := container.Entity
+		for _, container := range containers {
+			container.Lock.RLock()
+			targetEntity := container.Entity
 
-		if !targetEntity.Spatial.Stackable {
-			isPassable = false
-			if !targetEntity.Spatial.Toggleable {
-				return
+			if !targetEntity.Spatial.Stackable {
+				isPassable = false
+				if !targetEntity.Spatial.Toggleable {
+					return
+				}
+
+				queue <- intents.OpenSpatial{
+					SourceID: sourceID,
+					TargetID: targetEntity.ID,
+				}
 			}
 
-			queue <- intents.OpenSpatial{
+			container.Lock.RUnlock()
+		}
+
+		if isPassable {
+			queue <- intents.Move{
 				SourceID: sourceID,
-				TargetID: targetEntity.ID,
+				Position: targetPos,
 			}
+			queue <- intents.Perceive{SourceID: sourceID}
 		}
-
-		container.Lock.RUnlock()
-	}
-
-	if isPassable {
-		queue <- intents.Move{
-			SourceID: sourceID,
-			Position: targetPos,
-		}
-		queue <- intents.Perceive{SourceID: sourceID}
 	}
 }

@@ -3,6 +3,7 @@ package entities
 import (
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"sync"
 
 	"github.com/clagraff/devoid/components"
@@ -135,8 +136,8 @@ func makePosContainer() posContainer {
 }
 
 type Locker struct {
-	byID  idContainer
-	byPos posContainer
+	byID  *idContainer
+	byPos *posContainer
 }
 
 func (l Locker) All() []Container {
@@ -156,15 +157,16 @@ func (l Locker) GetByID(id uuid.UUID) (Container, error) {
 func (l Locker) GetByPosition(pos components.Position) ([]Container, error) {
 	entitiesAtPosition, ok := l.byPos.Load(pos)
 	if !ok {
-		return nil, errors.Errorf("no position for %+v", pos)
+		return nil, nil
 	}
 
 	return entitiesAtPosition.All(), nil
 }
 
-func (l Locker) Set(entity Entity) error {
+func (l *Locker) Set(entity Entity) error {
 	// Grab the entity and lock it.
 	id := entity.ID
+	log.Println("stackability", entity.Spatial.Stackable)
 
 	container, ok := l.byID.Load(id)
 	if !ok {
@@ -198,7 +200,7 @@ func (l Locker) Set(entity Entity) error {
 
 	ids, ok := l.byPos.Load(newPos)
 	if !ok {
-		l.byPos.Store(newPos, makeIDContainer())
+		ids = makeIDContainer()
 	}
 
 	ids.Store(id, container)
@@ -207,7 +209,7 @@ func (l Locker) Set(entity Entity) error {
 	return nil
 }
 
-func (l Locker) Delete(id uuid.UUID) error {
+func (l *Locker) Delete(id uuid.UUID) error {
 	container, ok := l.byID.Load(id)
 	if !ok {
 		return errors.Errorf("no entity with id %s", id)
@@ -229,7 +231,17 @@ func (l Locker) Delete(id uuid.UUID) error {
 	return nil
 }
 
-func (l Locker) DeleteAll() {
+func (l *Locker) DeleteFromPos(id uuid.UUID, pos components.Position) error {
+	entitiesAtPosition, ok := l.byPos.Load(pos)
+	if ok {
+		entitiesAtPosition.Delete(id)
+		l.byPos.Store(pos, entitiesAtPosition)
+	}
+
+	return nil
+}
+
+func (l *Locker) DeleteAll() {
 	containers := l.byID.All()
 	for _, container := range containers {
 		l.Delete(container.Entity.ID)
@@ -251,28 +263,17 @@ func (l *Locker) FromJSONFile(path string) error {
 	}
 
 	for _, entity := range allEntities {
-		container := makeContainer()
-		*container.Entity = entity
-
-		l.byID.Store(entity.ID, container)
-
-		pos := entity.Position
-
-		if ids, ok := l.byPos.Load(pos); ok {
-			ids.Store(entity.ID, container)
-		} else {
-			ids = makeIDContainer()
-			ids.Store(entity.ID, container)
-			l.byPos.Store(pos, ids)
-		}
+		l.Set(entity)
 	}
 
 	return nil
 }
 
 func MakeLocker() Locker {
+	ids := makeIDContainer()
+	pos := makePosContainer()
 	return Locker{
-		byID:  makeIDContainer(),
-		byPos: makePosContainer(),
+		byID:  &ids,
+		byPos: &pos,
 	}
 }

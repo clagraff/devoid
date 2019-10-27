@@ -142,9 +142,7 @@ func handleNotification(
 	currentSubs, ok = subscribers[notification.Type]
 
 	if !ok {
-		fmt.Printf("no subscribers to %T%+v\n", notification.Type, notification.Type)
 		return
-
 	}
 
 	for i := len(currentSubs) - 1; i >= 0; i-- {
@@ -158,7 +156,6 @@ func handleNotification(
 			)
 
 			if len(currentSubs) == 0 {
-				fmt.Printf("no more subscribers for %T\n", notification.Type)
 				delete(subscribers, notification.Type)
 			}
 		}
@@ -177,17 +174,11 @@ func handleIntents(
 		}
 
 		for _, notification := range notifications {
-			fmt.Printf(
-				"sending notification on %T for intent %T\n",
-				notification.Type,
-				intent,
-			)
 			notificationQueue <- notification
 		}
 	}
 }
 
 func handleIntent(locker *entities.Locker, intent intents.Intent) ([]mutators.Mutator, []pubsub.Notification) {
-	fmt.Printf("handling intent %T\n", intent)
 	return intent.Compute(locker)
 }
