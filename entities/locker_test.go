@@ -53,3 +53,41 @@ func TestMultiLock_Lock(t *testing.T) {
 		)
 	}
 }
+
+func TestMultiLock_Unlock(t *testing.T) {
+	unlockedAmount := 0
+
+	lockFn := func() {}
+	unlockFn := func() {
+		unlockedAmount++
+	}
+
+	mockLocks := []sync.Locker{
+		makeMockLock(lockFn, unlockFn),
+		makeMockLock(lockFn, unlockFn),
+		makeMockLock(lockFn, unlockFn),
+	}
+
+	m := multiLock{mockLocks}
+	m.Lock()
+	m.Unlock()
+
+	if len(mockLocks) != unlockedAmount {
+		t.Errorf(
+			"wanted %d unlocked mocks, only got %d",
+			len(mockLocks),
+			unlockedAmount,
+		)
+	}
+}
+
+func TestMakeEntityContainer(t *testing.T) {
+	container := makeEntityContainer()
+	if container.Lock == nil {
+		t.Errorf("expected non-nil *sync.RWMutex")
+	}
+
+	if container.Entity == nil {
+		t.Errorf("expected non-nil *Entity")
+	}
+}

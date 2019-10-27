@@ -19,7 +19,7 @@ type multiLock struct {
 // Lock will sequentially lock all sync.Locker values currently contained
 // in the multiLock.
 func (ml multiLock) Lock() {
-	for i, l := range ml.locks {
+	for _, l := range ml.locks {
 		l.Lock()
 	}
 }
@@ -32,56 +32,56 @@ func (ml multiLock) Unlock() {
 	}
 }
 
-// entityContainer serves to maintain both a single *Entity and a RWMutex
+// Container serves to maintain both a single *Entity and a RWMutex
 // for access.
-type entityContainer struct {
+type Container struct {
 	Lock   *sync.RWMutex
 	Entity *Entity
 }
 
-func makeEntityContainer() entityContainer {
-	return entityContainer{
+func makeContainer() Container {
+	return Container{
 		Lock:   new(sync.RWMutex),
 		Entity: new(Entity),
 	}
 }
 
-// idContainer is a concurrent-use map of UUID ID to entityContainer.
+// idContainer is a concurrent-use map of UUID ID to Container.
 type idContainer struct {
 	internal *sync.Map
 }
 
-// Delete the entityContainer at the provided ID if present, or do nothing.
+// Delete the Container at the provided ID if present, or do nothing.
 func (c idContainer) Delete(id uuid.UUID) {
 	c.internal.Delete(id)
 }
 
-// Load returns the entityContainer for the provided id, with a boolean
+// Load returns the Container for the provided id, with a boolean
 // indicating success.
-func (c idContainer) Load(id uuid.UUID) (entityContainer, bool) {
-	var container entityContainer
+func (c idContainer) Load(id uuid.UUID) (Container, bool) {
+	var container Container
 
 	value, ok := c.internal.Load(id)
 	if ok {
-		container = value.(entityContainer)
+		container = value.(Container)
 	}
 
 	return container, ok
 }
 
-// Store will save the provided entityContainer at the given id; this will
+// Store will save the provided Container at the given id; this will
 // override any previous value stored at that id.
-func (c idContainer) Store(id uuid.UUID, container entityContainer) {
+func (c idContainer) Store(id uuid.UUID, container Container) {
 	c.internal.Store(id, container)
 }
 
-// All returns a list of entityContainer stored in this map.
+// All returns a list of Container stored in this map.
 // Modifications to the map while this function runs may impact the results.
-func (c idContainer) All() []entityContainer {
-	allContainers := make([]entityContainer, 0)
+func (c idContainer) All() []Container {
+	allContainers := make([]Container, 0)
 
 	ranger := func(key, value interface{}) bool {
-		if ec, ok := value.(entityContainer); ok {
+		if ec, ok := value.(Container); ok {
 			allContainers = append(allContainers, ec)
 		}
 		return true
@@ -139,49 +139,45 @@ type Locker struct {
 	byPos posContainer
 }
 
-func (l Locker) GetByID(id uuid.UUID) (Entity, sync.Locker, error) {
-	container, ok := l.byID.Load(id)
-	if !ok {
-		return Entity{}, nil, errors.Errorf("no entity with id %s", id)
-	}
-
-	return *container.Entity, container.Lock.RLocker(), nil
+func (l Locker) All() []Container {
+	return l.byID.All()
 }
 
-func (l Locker) GetByPosition(pos components.Position) ([]Entity, sync.Locker, error) {
-	entitiesByID, ok := l.byPos.Load(pos)
+func (l Locker) GetByID(id uuid.UUID) (Container, error) {
+	container, ok := l.byID.Load(id)
 	if !ok {
-		return nil, nil, errors.Errorf("no position for %+v", pos)
+		return Container{}, errors.Errorf("no entity with id %s", id)
 	}
 
-	entities := make([]Entity, 0)
-	rLocks := make([]sync.Locker, 0)
+	return container, nil
+}
 
-	for _, container := range entitiesByID.All() {
-		entities = append(entities, *container.Entity)
-		rLocks = append(rLocks, container.Lock.RLocker())
+// TODO: Return list of sync.Locker
+func (l Locker) GetByPosition(pos components.Position) ([]Container, error) {
+	entitiesAtPosition, ok := l.byPos.Load(pos)
+	if !ok {
+		return nil, errors.Errorf("no position for %+v", pos)
 	}
 
-	allLocks := multiLock{rLocks}
-
-	return entities, allLocks, nil
+	return entitiesAtPosition.All(), nil
 }
 
 func (l Locker) Set(entity Entity) error {
 	// Grab the entity and lock it.
 	id := entity.ID
 
-	entityContainer, ok := l.byID.Load(id)
+	container, ok := l.byID.Load(id)
 	if !ok {
-		return errors.Errorf("no entity with id %s", id)
+		container = makeContainer()
+		container.Entity = &entity
 	}
 
-	entityContainer.Lock.Lock()
-	defer entityContainer.Lock.Unlock()
+	container.Lock.Lock()
+	defer container.Lock.Unlock()
 
 	// Grab old version. Check if position differs.
 
-	oldEntity := entityContainer.Entity
+	oldEntity := container.Entity
 	oldPos := oldEntity.Position
 
 	// If position changed, remove from old pos.
@@ -194,8 +190,8 @@ func (l Locker) Set(entity Entity) error {
 	}
 
 	// Update entity contents in container. Update in ID store.
-	*entityContainer.Entity = entity
-	l.byID.Store(id, entityContainer)
+	*container.Entity = entity
+	l.byID.Store(id, container)
 
 	// Update in position store.
 	newPos := entity.Position
@@ -205,10 +201,39 @@ func (l Locker) Set(entity Entity) error {
 		l.byPos.Store(newPos, makeIDContainer())
 	}
 
-	ids.Store(id, entityContainer)
+	ids.Store(id, container)
 
 	l.byPos.Store(newPos, ids)
 	return nil
+}
+
+func (l Locker) Delete(id uuid.UUID) error {
+	container, ok := l.byID.Load(id)
+	if !ok {
+		return errors.Errorf("no entity with id %s", id)
+	}
+
+	container.Lock.Lock()
+	defer container.Lock.Unlock()
+
+	position := container.Entity.Position
+
+	entitiesAtPosition, ok := l.byPos.Load(position)
+	if ok {
+		entitiesAtPosition.Delete(id)
+		l.byPos.Store(position, entitiesAtPosition)
+	}
+
+	l.byID.Delete(id)
+
+	return nil
+}
+
+func (l Locker) DeleteAll() {
+	containers := l.byID.All()
+	for _, container := range containers {
+		l.Delete(container.Entity.ID)
+	}
 }
 
 func (l *Locker) FromJSONFile(path string) error {
@@ -220,13 +245,13 @@ func (l *Locker) FromJSONFile(path string) error {
 
 	// try to unmarshal into entity list
 	allEntities := make([]Entity, 0)
-	err = json.Unmarshal(bytes, allEntities)
+	err = json.Unmarshal(bytes, &allEntities)
 	if err != nil {
 		return errors.Wrapf(err, "not a valid json file %s", path)
 	}
 
 	for _, entity := range allEntities {
-		container := makeEntityContainer()
+		container := makeContainer()
 		*container.Entity = entity
 
 		l.byID.Store(entity.ID, container)
@@ -245,7 +270,7 @@ func (l *Locker) FromJSONFile(path string) error {
 	return nil
 }
 
-func makeLocker() Locker {
+func MakeLocker() Locker {
 	return Locker{
 		byID:  makeIDContainer(),
 		byPos: makePosContainer(),

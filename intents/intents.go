@@ -8,14 +8,13 @@ import (
 	"github.com/clagraff/devoid/entities"
 	"github.com/clagraff/devoid/mutators"
 	"github.com/clagraff/devoid/pubsub"
-	"github.com/clagraff/devoid/state"
 
 	errs "github.com/go-errors/errors"
 	uuid "github.com/satori/go.uuid"
 )
 
 type Intent interface {
-	Compute(*state.State) ([]mutators.Mutator, []pubsub.Notification)
+	Compute(*entities.Locker) ([]mutators.Mutator, []pubsub.Notification)
 }
 
 func Unmarshal(kind string, bytes []byte) (Intent, error) {
@@ -59,13 +58,15 @@ type Move struct {
 	Position components.Position
 }
 
-func (move Move) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
-	sourceEntity, unlock, ok := state.ByID(move.SourceID)
-	if !ok {
+func (move Move) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+	sourceContainer, err := locker.GetByID(move.SourceID)
+	if err != nil {
 		panic("could not locate entity")
 	}
-	defer unlock()
+	sourceContainer.Lock.RLock()
+	defer sourceContainer.Lock.RUnlock()
 
+	sourceEntity := sourceContainer.Entity
 	xDiff := float64(sourceEntity.Position.X - move.Position.X)
 	yDiff := float64(sourceEntity.Position.Y - move.Position.Y)
 
@@ -73,16 +74,20 @@ func (move Move) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notif
 		panic(errs.Errorf("desired Move position is too far away"))
 	}
 
-	entitiesAtPosition, unlockPos, ok := state.ByPosition(move.Position)
-	if !ok {
+	containersAtPosition, err := locker.GetByPosition(move.Position)
+	if err != nil {
 		panic("shit went wrong")
 	}
-	defer unlockPos()
 
-	for _, entity := range entitiesAtPosition {
-		if !entity.Spatial.Stackable {
-			return nil, nil // cannot move
+	for _, container := range containersAtPosition {
+		if container.Entity == sourceContainer.Entity {
+			panic("cannot move if already there")
 		}
+		container.Lock.RLock()
+		if !container.Entity.Spatial.Stackable {
+			return nil, nil
+		}
+		container.Lock.RUnlock()
 	}
 
 	moveTo := mutators.MoveTo{
@@ -118,12 +123,15 @@ type Info struct {
 	SourceID uuid.UUID
 }
 
-func (info Info) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
-	sourceEntity, unlock, ok := state.ByID(info.SourceID)
-	if !ok {
+func (info Info) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+	sourceContainer, err := locker.GetByID(info.SourceID)
+	if err != nil {
 		panic("compute info went wrong")
 	}
-	defer unlock()
+	sourceContainer.Lock.RLock()
+	defer sourceContainer.Lock.RUnlock()
+
+	sourceEntity := sourceContainer.Entity
 
 	inform := mutators.SetEntity{
 		Entity: *sourceEntity,
@@ -143,13 +151,15 @@ type Perceive struct {
 	SourceID uuid.UUID
 }
 
-func (intent Perceive) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
-	sourceEntity, unlock, ok := state.ByID(intent.SourceID)
-	if !ok {
+func (intent Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+	sourceContainer, err := locker.GetByID(intent.SourceID)
+	if err != nil {
 		panic("compute perceive went wrong")
 	}
+	sourceContainer.Lock.RLock()
+	sourceEntity := sourceContainer.Entity
 	sourcePosition := sourceEntity.Position
-	unlock()
+	sourceContainer.Lock.RUnlock()
 
 	visibility := 5
 	minX := sourcePosition.X - visibility
@@ -158,20 +168,23 @@ func (intent Perceive) Compute(state *state.State) ([]mutators.Mutator, []pubsub
 	minY := sourcePosition.Y - visibility
 	maxY := sourcePosition.Y + visibility
 
-	ents := make([]*entities.Entity, 0)
 	muts := make([]mutators.Mutator, 0)
 
 	for x := minX; x <= maxX; x++ {
 		for y := minY; y <= maxY; y++ {
-			entitiesAtPosition, unlock, ok := state.ByPosition(components.Position{x, y})
-			if ok {
-				ents = append(ents, entitiesAtPosition...)
+			containers, err := locker.GetByPosition(components.Position{x, y})
+			if err != nil {
+				panic("oh shit doesnt work")
+			}
 
-				for _, e := range entitiesAtPosition {
-					muts = append(muts, mutators.SetEntity{Entity: *e})
+			for _, container := range containers {
+				if container.Entity == sourceEntity {
+					continue
 				}
+				container.Lock.RLock()
 
-				unlock()
+				muts = append(muts, mutators.SetEntity{Entity: *container.Entity})
+				container.Lock.RUnlock()
 			}
 		}
 	}
@@ -195,19 +208,26 @@ type OpenSpatial struct {
 	TargetID uuid.UUID
 }
 
-func (intent OpenSpatial) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
-	_, unlock, ok := state.ByID(intent.SourceID)
-	if !ok {
+func (intent OpenSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+	if uuid.Equal(intent.SourceID, intent.TargetID) {
+		panic("cannot open yourself I think")
+	}
+
+	sourceContainer, err := locker.GetByID(intent.SourceID)
+	if err != nil {
 		panic("compute info went wrong")
 	}
-	defer unlock()
+	sourceContainer.Lock.RLock()
+	defer sourceContainer.Lock.RUnlock()
 
-	targetEntity, unlock, ok := state.ByID(intent.TargetID)
-	if !ok {
+	targetContainer, err := locker.GetByID(intent.TargetID)
+	if err != nil {
 		panic("compute OpenSpatial went wrong")
 	}
-	defer unlock()
+	targetContainer.Lock.RLock()
+	defer targetContainer.Lock.RUnlock()
 
+	targetEntity := targetContainer.Entity
 	// If target is not toggleable, do nothing.
 	if !targetEntity.Spatial.Toggleable {
 		return nil, nil
@@ -242,18 +262,24 @@ type CloseSpatial struct {
 	TargetID uuid.UUID
 }
 
-func (intent CloseSpatial) Compute(state *state.State) ([]mutators.Mutator, []pubsub.Notification) {
-	sourceEntity, unlock, ok := state.ByID(intent.SourceID)
-	if !ok {
+func (intent CloseSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+	sourceContainer, err := locker.GetByID(intent.SourceID)
+	if err != nil {
 		panic("compute info went wrong")
 	}
-	defer unlock()
+	sourceContainer.Lock.RLock()
+	defer sourceContainer.Lock.RUnlock()
 
-	targetEntity, unlock, ok := state.ByID(intent.TargetID)
-	if !ok {
+	sourceEntity := sourceContainer.Entity
+
+	targetContainer, err := locker.GetByID(intent.TargetID)
+	if err != nil {
 		panic("compute info went wrong")
 	}
-	defer unlock()
+	targetContainer.Lock.RLock()
+	defer targetContainer.Lock.RUnlock()
+
+	targetEntity := targetContainer.Entity
 
 	// If target is not toggleable, do nothing.
 	if !targetEntity.Spatial.Toggleable {
