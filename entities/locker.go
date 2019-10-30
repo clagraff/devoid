@@ -11,28 +11,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-// multiLock satisfies the sync.Locker interface, for the purpose of
-// locking and unlocking a list of sync.Locker values sequentially.
-type multiLock struct {
-	locks []sync.Locker
-}
-
-// Lock will sequentially lock all sync.Locker values currently contained
-// in the multiLock.
-func (ml multiLock) Lock() {
-	for _, l := range ml.locks {
-		l.Lock()
-	}
-}
-
-// Unlock will sequentially unlock all sync.Locker values currently contained
-// in the multiLock.
-func (ml multiLock) Unlock() {
-	for _, l := range ml.locks {
-		l.Unlock()
-	}
-}
-
 // Container serves to maintain both a single *Entity and a RWMutex
 // for access.
 type Container struct {
