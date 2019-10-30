@@ -52,10 +52,6 @@ const (
 	left
 )
 
-func logIt(i interface{}) {
-	log.Printf("%T: %+v\n", i, i)
-}
-
 func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, intentsQueue chan intents.Intent) {
 	f, err := os.OpenFile("client.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -149,7 +145,7 @@ func pollTerminalEvents(queue chan termbox.Event) {
 
 func handleMutators(locker *entities.Locker, queue chan mutators.Mutator) {
 	for mutator := range queue {
-		handleMutator(locker, mutator)
+		mutator.Mutate(locker)
 	}
 }
 
@@ -176,15 +172,6 @@ func handleTunnel(
 	}
 }
 
-func handleMutator(locker *entities.Locker, mutator mutators.Mutator) {
-	logIt(mutator)
-	if mutator != nil {
-		mutator.Mutate(locker)
-	} else {
-		// panic?
-	}
-}
-
 func handleIntents(
 	locker *entities.Locker,
 	serverID uuid.UUID,
@@ -192,7 +179,6 @@ func handleIntents(
 	messagesQueue chan network.Message,
 ) {
 	for intent := range queue {
-		logIt(intent)
 		messagesQueue <- network.MakeMessage(
 			serverID,
 			intent,
