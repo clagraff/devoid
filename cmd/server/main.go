@@ -6,11 +6,9 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/clagraff/devoid/entities"
 	"github.com/clagraff/devoid/network"
 	"github.com/clagraff/devoid/server"
-	"github.com/clagraff/devoid/state"
-
-	errs "github.com/go-errors/errors"
 )
 
 type serverConfig struct {
@@ -37,32 +35,25 @@ func loadServerConfig(path string) serverConfig {
 }
 
 func run(cfg serverConfig) {
+	locker := entities.MakeLocker()
+	if err := locker.FromJSONFile(cfg.EntitiesPath); err != nil {
+		fmt.Printf("%+v\n", err)
+		os.Exit(1)
+	}
+
 	info := network.MakeConnInfo("localhost", 8080, network.MakeUUID(),
 		cfg.CertPath, cfg.KeyPath)
 
 	s := network.NewServer(info)
 	closeFn, tunnels, err := s.Serve()
 	if err != nil {
-		if e, ok := err.(*errs.Error); ok {
-			fmt.Println(e.ErrorStack())
-			panic(e)
-		}
-		panic(err)
+		fmt.Printf("%+v\n", err)
+		os.Exit(1)
 	}
 
 	defer closeFn()
 
-	bytes, err := ioutil.ReadFile(cfg.EntitiesPath)
-	if err != nil {
-		panic(err)
-	}
-
-	gameState := state.NewState()
-	if err := gameState.FromBytes(bytes); err != nil {
-		panic(err)
-	}
-
-	server.Serve(gameState, tunnels)
+	server.Serve(&locker, tunnels)
 }
 
 func main() {

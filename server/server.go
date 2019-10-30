@@ -3,23 +3,23 @@ package server
 import (
 	"fmt"
 
+	"github.com/clagraff/devoid/entities"
 	"github.com/clagraff/devoid/intents"
 	"github.com/clagraff/devoid/mutators"
 	"github.com/clagraff/devoid/network"
 	"github.com/clagraff/devoid/pubsub"
-	"github.com/clagraff/devoid/state"
 
 	uuid "github.com/satori/go.uuid"
 )
 
-func Serve(state *state.State, tunnels chan network.Tunnel) {
+func Serve(locker *entities.Locker, tunnels chan network.Tunnel) {
 	intentsQueue := make(chan intents.Intent, 100)
 	notificationsQueue := make(chan pubsub.Notification, 100)
 	messagesQueue := make(chan network.Message, 100)
 	subscriberQueue := make(chan pubsub.Subscriber, 100)
 
-	go handleTunnels(state, tunnels, messagesQueue, intentsQueue, subscriberQueue)
-	go handleIntents(state, intentsQueue, notificationsQueue)
+	go handleTunnels(locker, tunnels, messagesQueue, intentsQueue, subscriberQueue)
+	go handleIntents(locker, intentsQueue, notificationsQueue)
 	go handleNotifications(
 		notificationsQueue,
 		messagesQueue,
@@ -30,7 +30,7 @@ func Serve(state *state.State, tunnels chan network.Tunnel) {
 }
 
 func handleTunnels(
-	state *state.State,
+	locker *entities.Locker,
 	tunnels chan network.Tunnel,
 	messagesQueue chan network.Message,
 	intentsQueue chan intents.Intent,
@@ -41,7 +41,7 @@ func handleTunnels(
 		select {
 		case tunnel := <-tunnels:
 			availableTunnels[tunnel.ID] = tunnel
-			handleSubscribe(state, tunnel, subscriberQueue)
+			handleSubscribe(locker, tunnel, subscriberQueue)
 			intentsQueue <- intents.Perceive{SourceID: tunnel.ID}
 		case message := <-messagesQueue:
 			clientID := message.ClientID
@@ -74,15 +74,18 @@ func handleTunnels(
 }
 
 func handleSubscribe(
-	state *state.State,
+	locker *entities.Locker,
 	tunnel network.Tunnel,
 	subscriberQueue chan pubsub.Subscriber,
 ) {
-	entity, unlock, ok := state.ByID(tunnel.ID)
-	if !ok {
-		panic("could not locate ID by tunnel id")
+	container, err := locker.GetByID(tunnel.ID)
+	if err != nil {
+		panic(err)
 	}
-	defer unlock()
+	container.RLock()
+	defer container.RUnlock()
+
+	entity := container.GetEntity()
 
 	subscribers := []pubsub.Subscriber{
 		pubsub.MakeSubscriber(
@@ -139,9 +142,7 @@ func handleNotification(
 	currentSubs, ok = subscribers[notification.Type]
 
 	if !ok {
-		fmt.Printf("no subscribers to %T%+v\n", notification.Type, notification.Type)
 		return
-
 	}
 
 	for i := len(currentSubs) - 1; i >= 0; i-- {
@@ -155,7 +156,6 @@ func handleNotification(
 			)
 
 			if len(currentSubs) == 0 {
-				fmt.Printf("no more subscribers for %T\n", notification.Type)
 				delete(subscribers, notification.Type)
 			}
 		}
@@ -163,28 +163,22 @@ func handleNotification(
 }
 
 func handleIntents(
-	state *state.State,
+	locker *entities.Locker,
 	queue chan intents.Intent,
 	notificationQueue chan pubsub.Notification,
 ) {
 	for intent := range queue {
-		serverMutations, notifications := handleIntent(state, intent)
+		serverMutations, notifications := handleIntent(locker, intent)
 		for _, mutation := range serverMutations {
-			mutation.Mutate(state)
+			mutation.Mutate(locker)
 		}
 
 		for _, notification := range notifications {
-			fmt.Printf(
-				"sending notification on %T for intent %T\n",
-				notification.Type,
-				intent,
-			)
 			notificationQueue <- notification
 		}
 	}
 }
 
-func handleIntent(state *state.State, intent intents.Intent) ([]mutators.Mutator, []pubsub.Notification) {
-	fmt.Printf("handling intent %T\n", intent)
-	return intent.Compute(state)
+func handleIntent(locker *entities.Locker, intent intents.Intent) ([]mutators.Mutator, []pubsub.Notification) {
+	return intent.Compute(locker)
 }

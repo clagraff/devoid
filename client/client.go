@@ -2,13 +2,14 @@ package client
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/clagraff/devoid/components"
+	"github.com/clagraff/devoid/entities"
 	"github.com/clagraff/devoid/intents"
 	"github.com/clagraff/devoid/mutators"
 	"github.com/clagraff/devoid/network"
-	"github.com/clagraff/devoid/state"
 
 	termbox "github.com/nsf/termbox-go"
 	uuid "github.com/satori/go.uuid"
@@ -50,15 +51,14 @@ const (
 	left
 )
 
-func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intentsQueue chan intents.Intent) {
-
+func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, intentsQueue chan intents.Intent) {
 	messagesQueue := make(chan network.Message, 100)
 	mutatorsQueue := make(chan mutators.Mutator, 100)
 	uiEvents := make(chan termbox.Event, 100)
 
-	go handleMutators(state, mutatorsQueue)
-	go handleTunnel(state, tunnel, messagesQueue, mutatorsQueue)
-	go handleIntents(state, tunnel.ID, intentsQueue, messagesQueue)
+	go handleMutators(locker, mutatorsQueue)
+	go handleTunnel(locker, tunnel, messagesQueue, mutatorsQueue)
+	go handleIntents(tunnel.ID, intentsQueue, messagesQueue)
 
 	go pollTerminalEvents(uiEvents)
 
@@ -80,32 +80,14 @@ func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intent
 				close(mutatorsQueue)
 				close(uiEvents)
 				return
-			} else if ev.Ch == 'i' {
-				e, u, _ := state.ByPosition(components.Position{X: 3, Y: 7})
-				fmt.Println(e)
-				u()
 			} else if ev.Key == termbox.KeyArrowUp {
-				moveTo(state, entityID, up, intentsQueue)
+				moveTo(locker, entityID, up, intentsQueue)
 			} else if ev.Key == termbox.KeyArrowDown {
-				moveTo(state, entityID, down, intentsQueue)
+				moveTo(locker, entityID, down, intentsQueue)
 			} else if ev.Key == termbox.KeyArrowLeft {
-				moveTo(state, entityID, left, intentsQueue)
+				moveTo(locker, entityID, left, intentsQueue)
 			} else if ev.Key == termbox.KeyArrowRight {
-				moveTo(state, entityID, right, intentsQueue)
-			} else if ev.Ch == 'f' {
-				entity, unlock, ok := state.ByID(entityID)
-				if ok {
-					intentsQueue <- intents.Move{
-						SourceID: entityID,
-						Position: components.Position{
-							X: entity.Position.X + 1,
-							Y: entity.Position.Y + 1,
-						},
-					}
-					intentsQueue <- intents.Perceive{SourceID: entityID}
-
-					unlock()
-				}
+				moveTo(locker, entityID, right, intentsQueue)
 			}
 
 		case _ = <-ticker.C:
@@ -114,13 +96,10 @@ func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intent
 				panic(err)
 			}
 
-			ids := state.ListIDs()
-			for _, id := range ids {
-				entity, unlock, ok := state.ByID(id)
-				if !ok {
-
-					panic("failed to render entity")
-				}
+			containers := locker.All()
+			for _, container := range containers {
+				container.RLock()
+				entity := container.GetEntity()
 
 				char := '@'
 				if entity.Spatial.Toggleable {
@@ -139,7 +118,7 @@ func Serve(entityID uuid.UUID, state *state.State, tunnel network.Tunnel, intent
 					termbox.ColorWhite,
 					termbox.ColorBlack,
 				)
-				unlock()
+				container.RUnlock()
 			}
 
 			c.Render()
@@ -155,14 +134,14 @@ func pollTerminalEvents(queue chan termbox.Event) {
 	}
 }
 
-func handleMutators(state *state.State, queue chan mutators.Mutator) {
+func handleMutators(locker *entities.Locker, queue chan mutators.Mutator) {
 	for mutator := range queue {
-		handleMutator(state, mutator)
+		mutator.Mutate(locker)
 	}
 }
 
 func handleTunnel(
-	state *state.State,
+	locker *entities.Locker,
 	tunnel network.Tunnel,
 	messagesQueue chan network.Message,
 	mutatorsQueue chan mutators.Mutator,
@@ -184,16 +163,7 @@ func handleTunnel(
 	}
 }
 
-func handleMutator(state *state.State, mutator mutators.Mutator) {
-	if mutator != nil {
-		mutator.Mutate(state)
-	} else {
-		// panic?
-	}
-}
-
 func handleIntents(
-	state *state.State,
 	serverID uuid.UUID,
 	queue chan intents.Intent,
 	messagesQueue chan network.Message,
@@ -206,13 +176,16 @@ func handleIntents(
 	}
 }
 
-func moveTo(state *state.State, sourceID uuid.UUID, dir direction, queue chan intents.Intent) {
-	sourceEntity, sourceUnlock, ok := state.ByID(sourceID)
-	defer sourceUnlock()
-
-	if !ok {
-		return
+func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue chan intents.Intent) {
+	sourceContainer, err := locker.GetByID(sourceID)
+	if err != nil {
+		fmt.Printf("%+v\n", err)
+		os.Exit(1)
 	}
+	sourceContainer.RLock()
+	defer sourceContainer.RUnlock()
+
+	sourceEntity := sourceContainer.GetEntity()
 
 	x := sourceEntity.Position.X
 	y := sourceEntity.Position.Y
@@ -233,19 +206,21 @@ func moveTo(state *state.State, sourceID uuid.UUID, dir direction, queue chan in
 		Y: y,
 	}
 
-	targetEntities, targetUnlock, ok := state.ByPosition(targetPos)
-	defer targetUnlock()
-
-	if !ok {
+	containers, err := locker.GetByPosition(targetPos)
+	if len(containers) == 0 {
 		queue <- intents.Move{
 			SourceID: sourceID,
 			Position: targetPos,
 		}
 		queue <- intents.Perceive{SourceID: sourceID}
 	} else {
+
 		isPassable := true
 
-		for _, targetEntity := range targetEntities {
+		for _, container := range containers {
+			container.RLock()
+			targetEntity := container.GetEntity()
+
 			if !targetEntity.Spatial.Stackable {
 				isPassable = false
 				if !targetEntity.Spatial.Toggleable {
@@ -257,6 +232,8 @@ func moveTo(state *state.State, sourceID uuid.UUID, dir direction, queue chan in
 					TargetID: targetEntity.ID,
 				}
 			}
+
+			container.RUnlock()
 		}
 
 		if isPassable {

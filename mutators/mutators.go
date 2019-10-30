@@ -2,18 +2,16 @@ package mutators
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/clagraff/devoid/components"
 	"github.com/clagraff/devoid/entities"
-	"github.com/clagraff/devoid/state"
 
 	errs "github.com/go-errors/errors"
 	uuid "github.com/satori/go.uuid"
 )
 
 type Mutator interface {
-	Mutate(*state.State)
+	Mutate(*entities.Locker)
 }
 
 func Unmarshal(kind string, bytes []byte) (Mutator, error) {
@@ -57,22 +55,19 @@ type MoveTo struct {
 	Position components.Position
 }
 
-func (moveTo MoveTo) Mutate(state *state.State) {
-	sourceEntity, unlock, ok := state.ByID(moveTo.SourceID)
-	if !ok {
-		panic(
-			fmt.Sprintf(
-				"failed to aquire entity by ID: %s",
-				moveTo.SourceID,
-			),
-		)
+func (moveTo MoveTo) Mutate(locker *entities.Locker) {
+	container, err := locker.GetByID(moveTo.SourceID)
+	if err != nil {
+		panic(err)
 	}
-	defer unlock()
+	container.RLock()
+	entity := *container.GetEntity()
+	container.RUnlock()
 
-	sourceEntity.Position.X = moveTo.Position.X
-	sourceEntity.Position.Y = moveTo.Position.Y
+	entity.Position.X = moveTo.Position.X
+	entity.Position.Y = moveTo.Position.Y
 
-	state.UpsertPosition(sourceEntity)
+	locker.Set(entity)
 }
 
 type MoveFrom struct {
@@ -80,16 +75,16 @@ type MoveFrom struct {
 	Position components.Position
 }
 
-func (moveFrom MoveFrom) Mutate(state *state.State) {
-	state.DeleteIDFromPosition(moveFrom.SourceID, moveFrom.Position)
+func (moveFrom MoveFrom) Mutate(locker *entities.Locker) {
+	locker.DeleteFromPos(moveFrom.SourceID, moveFrom.Position)
 }
 
 type SetEntity struct {
 	Entity entities.Entity
 }
 
-func (setEntity SetEntity) Mutate(state *state.State) {
-	state.Upsert(&setEntity.Entity)
+func (setEntity SetEntity) Mutate(locker *entities.Locker) {
+	locker.Set(setEntity.Entity)
 }
 
 type SetStackability struct {
@@ -97,14 +92,14 @@ type SetStackability struct {
 	Stackability bool
 }
 
-func (m SetStackability) Mutate(state *state.State) {
-	entity := &m.Entity
+func (m SetStackability) Mutate(locker *entities.Locker) {
+	entity := m.Entity
 	entity.Spatial.Stackable = m.Stackability
-	state.Upsert(&m.Entity)
+	locker.Set(entity)
 }
 
 type ClearAllEntities struct{}
 
-func (_ ClearAllEntities) Mutate(state *state.State) {
-	state.DeleteAll()
+func (_ ClearAllEntities) Mutate(locker *entities.Locker) {
+	locker.DeleteAll()
 }

@@ -7,9 +7,9 @@ import (
 	"os"
 
 	"github.com/clagraff/devoid/client"
+	"github.com/clagraff/devoid/entities"
 	"github.com/clagraff/devoid/intents"
 	"github.com/clagraff/devoid/network"
-	"github.com/clagraff/devoid/state"
 
 	errs "github.com/go-errors/errors"
 	uuid "github.com/satori/go.uuid"
@@ -50,10 +50,10 @@ func run(cfg clientConfig) {
 	}
 	defer closeFn()
 
-	gameState := state.NewState()
+	locker := entities.MakeLocker()
 	intentsQueue := make(chan intents.Intent, 100)
 
-	client.Serve(cfg.EntityID, gameState, tunnel, intentsQueue)
+	client.Serve(cfg.EntityID, &locker, tunnel, intentsQueue)
 }
 
 func main() {
