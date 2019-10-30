@@ -14,7 +14,11 @@ type Container interface {
 	GetEntity() *Entity
 	SetEntity(*Entity)
 
-	GetRWMux() *sync.RWMutex
+	Lock()
+	Unlock()
+
+	RLock()
+	RUnlock()
 }
 
 // Container serves to maintain both a single *Entity and a RWMutex
@@ -32,8 +36,20 @@ func (c *container) SetEntity(entity *Entity) {
 	c.entity = entity
 }
 
-func (c container) GetRWMux() *sync.RWMutex {
-	return c.mux
+func (c container) Lock() {
+	c.mux.Lock()
+}
+
+func (c container) Unlock() {
+	c.mux.Unlock()
+}
+
+func (c container) RLock() {
+	c.mux.RLock()
+}
+
+func (c container) RUnlock() {
+	c.mux.RUnlock()
 }
 
 func newContainer() Container {
@@ -169,8 +185,8 @@ func (l *Locker) Set(entity Entity) error {
 		container.SetEntity(&entity)
 	}
 
-	container.GetRWMux().Lock()
-	defer container.GetRWMux().Unlock()
+	container.Lock()
+	defer container.Unlock()
 
 	// Grab old version. Check if position differs.
 
@@ -210,8 +226,8 @@ func (l *Locker) Delete(id uuid.UUID) error {
 		return errors.Errorf("no entity with id %s", id)
 	}
 
-	container.GetRWMux().Lock()
-	defer container.GetRWMux().Unlock()
+	container.Lock()
+	defer container.Unlock()
 
 	position := container.GetEntity().Position
 

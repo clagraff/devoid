@@ -60,9 +60,9 @@ func (moveTo MoveTo) Mutate(locker *entities.Locker) {
 	if err != nil {
 		panic(err)
 	}
-	container.GetRWMux().RLock()
+	container.RLock()
 	entity := *container.GetEntity()
-	container.GetRWMux().RUnlock()
+	container.RUnlock()
 
 	entity.Position.X = moveTo.Position.X
 	entity.Position.Y = moveTo.Position.Y

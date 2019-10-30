@@ -82,8 +82,8 @@ func handleSubscribe(
 	if err != nil {
 		panic(err)
 	}
-	container.GetRWMux().RLock()
-	defer container.GetRWMux().RUnlock()
+	container.RLock()
+	defer container.RUnlock()
 
 	entity := container.GetEntity()
 
