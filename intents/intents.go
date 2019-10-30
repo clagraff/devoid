@@ -80,8 +80,7 @@ func (move Move) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.
 
 	for _, container := range containersAtPosition {
 		if container.GetEntity() == sourceContainer.GetEntity() {
-			continue
-			//panic("cannot move if already there")
+			panic("cannot move to where you are already at")
 		}
 		container.RLock()
 		if !container.GetEntity().Spatial.Stackable {
