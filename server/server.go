@@ -82,10 +82,10 @@ func handleSubscribe(
 	if err != nil {
 		panic(err)
 	}
-	container.Lock.Lock()
-	defer container.Lock.Unlock()
+	container.GetRWMux().RLock()
+	defer container.GetRWMux().RUnlock()
 
-	entity := container.Entity
+	entity := container.GetEntity()
 
 	subscribers := []pubsub.Subscriber{
 		pubsub.MakeSubscriber(

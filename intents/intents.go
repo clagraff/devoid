@@ -65,10 +65,10 @@ func (move Move) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.
 	if err != nil {
 		panic("could not locate entity")
 	}
-	sourceContainer.Lock.RLock()
-	defer sourceContainer.Lock.RUnlock()
+	sourceContainer.GetRWMux().RLock()
+	defer sourceContainer.GetRWMux().RUnlock()
 
-	sourceEntity := sourceContainer.Entity
+	sourceEntity := sourceContainer.GetEntity()
 	xDiff := float64(sourceEntity.Position.X - move.Position.X)
 	yDiff := float64(sourceEntity.Position.Y - move.Position.Y)
 
@@ -76,21 +76,18 @@ func (move Move) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.
 		panic(errs.Errorf("desired Move position is too far away"))
 	}
 
-	containersAtPosition, err := locker.GetByPosition(move.Position)
-	if err != nil {
-		panic("shit went wrong")
-	}
+	containersAtPosition, _ := locker.GetByPosition(move.Position)
 
 	for _, container := range containersAtPosition {
-		if container.Entity == sourceContainer.Entity {
+		if container.GetEntity() == sourceContainer.GetEntity() {
 			continue
 			//panic("cannot move if already there")
 		}
-		container.Lock.RLock()
-		if !container.Entity.Spatial.Stackable {
+		container.GetRWMux().RLock()
+		if !container.GetEntity().Spatial.Stackable {
 			return nil, nil
 		}
-		container.Lock.RUnlock()
+		container.GetRWMux().RUnlock()
 	}
 
 	moveTo := mutators.MoveTo{
@@ -131,10 +128,10 @@ func (info Info) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.
 	if err != nil {
 		panic("compute info went wrong")
 	}
-	sourceContainer.Lock.RLock()
-	defer sourceContainer.Lock.RUnlock()
+	sourceContainer.GetRWMux().RLock()
+	defer sourceContainer.GetRWMux().RUnlock()
 
-	sourceEntity := sourceContainer.Entity
+	sourceEntity := sourceContainer.GetEntity()
 
 	inform := mutators.SetEntity{
 		Entity: *sourceEntity,
@@ -160,10 +157,10 @@ func (intent Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []p
 		fmt.Printf("%+v\n", err)
 		os.Exit(1)
 	}
-	sourceContainer.Lock.RLock()
-	sourceEntity := sourceContainer.Entity
+	sourceContainer.GetRWMux().RLock()
+	sourceEntity := sourceContainer.GetEntity()
 	sourcePosition := sourceEntity.Position
-	sourceContainer.Lock.RUnlock()
+	sourceContainer.GetRWMux().RUnlock()
 
 	visibility := 5
 	minX := sourcePosition.X - visibility
@@ -176,15 +173,15 @@ func (intent Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []p
 
 	for x := minX; x <= maxX; x++ {
 		for y := minY; y <= maxY; y++ {
-			containers, err := locker.GetByPosition(components.Position{x, y})
-			if err != nil {
-				panic("oh shit doesnt work")
-			}
+			containers, _ := locker.GetByPosition(components.Position{x, y})
 
 			for _, container := range containers {
-				container.Lock.RLock()
-				muts = append(muts, mutators.SetEntity{Entity: *container.Entity})
-				container.Lock.RUnlock()
+				container.GetRWMux().RLock()
+				muts = append(
+					muts,
+					mutators.SetEntity{Entity: *container.GetEntity()},
+				)
+				container.GetRWMux().RUnlock()
 			}
 		}
 	}
@@ -217,17 +214,17 @@ func (intent OpenSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator, 
 	if err != nil {
 		panic("compute info went wrong")
 	}
-	sourceContainer.Lock.RLock()
-	defer sourceContainer.Lock.RUnlock()
+	sourceContainer.GetRWMux().RLock()
+	defer sourceContainer.GetRWMux().RUnlock()
 
 	targetContainer, err := locker.GetByID(intent.TargetID)
 	if err != nil {
 		panic("compute OpenSpatial went wrong")
 	}
-	targetContainer.Lock.RLock()
-	defer targetContainer.Lock.RUnlock()
+	targetContainer.GetRWMux().RLock()
+	defer targetContainer.GetRWMux().RUnlock()
 
-	targetEntity := targetContainer.Entity
+	targetEntity := targetContainer.GetEntity()
 	// If target is not toggleable, do nothing.
 	if !targetEntity.Spatial.Toggleable {
 		return nil, nil
@@ -267,19 +264,19 @@ func (intent CloseSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator,
 	if err != nil {
 		panic("compute info went wrong")
 	}
-	sourceContainer.Lock.RLock()
-	defer sourceContainer.Lock.RUnlock()
+	sourceContainer.GetRWMux().RLock()
+	defer sourceContainer.GetRWMux().RUnlock()
 
-	sourceEntity := sourceContainer.Entity
+	sourceEntity := sourceContainer.GetEntity()
 
 	targetContainer, err := locker.GetByID(intent.TargetID)
 	if err != nil {
 		panic("compute info went wrong")
 	}
-	targetContainer.Lock.RLock()
-	defer targetContainer.Lock.RUnlock()
+	targetContainer.GetRWMux().RLock()
+	defer targetContainer.GetRWMux().RUnlock()
 
-	targetEntity := targetContainer.Entity
+	targetEntity := targetContainer.GetEntity()
 
 	// If target is not toggleable, do nothing.
 	if !targetEntity.Spatial.Toggleable {

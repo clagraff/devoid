@@ -62,7 +62,7 @@ func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, i
 
 	go pollTerminalEvents(uiEvents)
 
-	err = termbox.Init()
+	err := termbox.Init()
 	if err != nil {
 		panic(err)
 	}
@@ -98,8 +98,8 @@ func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, i
 
 			containers := locker.All()
 			for _, container := range containers {
-				container.Lock.RLock()
-				entity := container.Entity
+				container.GetRWMux().RLock()
+				entity := container.GetEntity()
 
 				char := '@'
 				if entity.Spatial.Toggleable {
@@ -118,7 +118,7 @@ func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, i
 					termbox.ColorWhite,
 					termbox.ColorBlack,
 				)
-				container.Lock.RUnlock()
+				container.GetRWMux().RUnlock()
 			}
 
 			c.Render()
@@ -182,10 +182,10 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 		fmt.Printf("%+v\n", err)
 		os.Exit(1)
 	}
-	sourceContainer.Lock.RLock()
-	defer sourceContainer.Lock.RUnlock()
+	sourceContainer.GetRWMux().RLock()
+	defer sourceContainer.GetRWMux().RUnlock()
 
-	sourceEntity := sourceContainer.Entity
+	sourceEntity := sourceContainer.GetEntity()
 
 	x := sourceEntity.Position.X
 	y := sourceEntity.Position.Y
@@ -218,8 +218,8 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 		isPassable := true
 
 		for _, container := range containers {
-			container.Lock.RLock()
-			targetEntity := container.Entity
+			container.GetRWMux().RLock()
+			targetEntity := container.GetEntity()
 
 			if !targetEntity.Spatial.Stackable {
 				isPassable = false
@@ -233,7 +233,7 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 				}
 			}
 
-			container.Lock.RUnlock()
+			container.GetRWMux().RUnlock()
 		}
 
 		if isPassable {

@@ -3,7 +3,6 @@ package entities
 import (
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"sync"
 
 	"github.com/clagraff/devoid/components"
@@ -11,17 +10,36 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-// Container serves to maintain both a single *Entity and a RWMutex
-// for access.
-type Container struct {
-	Lock   *sync.RWMutex
-	Entity *Entity
+type Container interface {
+	GetEntity() *Entity
+	SetEntity(*Entity)
+
+	GetRWMux() *sync.RWMutex
 }
 
-func makeContainer() Container {
-	return Container{
-		Lock:   new(sync.RWMutex),
-		Entity: new(Entity),
+// Container serves to maintain both a single *Entity and a RWMutex
+// for access.
+type container struct {
+	mux    *sync.RWMutex
+	entity *Entity
+}
+
+func (c container) GetEntity() *Entity {
+	return c.entity
+}
+
+func (c *container) SetEntity(entity *Entity) {
+	c.entity = entity
+}
+
+func (c container) GetRWMux() *sync.RWMutex {
+	return c.mux
+}
+
+func newContainer() Container {
+	return &container{
+		mux:    new(sync.RWMutex),
+		entity: new(Entity),
 	}
 }
 
@@ -125,7 +143,7 @@ func (l Locker) All() []Container {
 func (l Locker) GetByID(id uuid.UUID) (Container, error) {
 	container, ok := l.byID.Load(id)
 	if !ok {
-		return Container{}, errors.Errorf("no entity with id %s", id)
+		return nil, errors.Errorf("no entity with id %s", id)
 	}
 
 	return container, nil
@@ -144,20 +162,19 @@ func (l Locker) GetByPosition(pos components.Position) ([]Container, error) {
 func (l *Locker) Set(entity Entity) error {
 	// Grab the entity and lock it.
 	id := entity.ID
-	log.Println("stackability", entity.Spatial.Stackable)
 
 	container, ok := l.byID.Load(id)
 	if !ok {
-		container = makeContainer()
-		container.Entity = &entity
+		container = newContainer()
+		container.SetEntity(&entity)
 	}
 
-	container.Lock.Lock()
-	defer container.Lock.Unlock()
+	container.GetRWMux().Lock()
+	defer container.GetRWMux().Unlock()
 
 	// Grab old version. Check if position differs.
 
-	oldEntity := container.Entity
+	oldEntity := container.GetEntity()
 	oldPos := oldEntity.Position
 
 	// If position changed, remove from old pos.
@@ -170,7 +187,7 @@ func (l *Locker) Set(entity Entity) error {
 	}
 
 	// Update entity contents in container. Update in ID store.
-	*container.Entity = entity
+	container.SetEntity(&entity)
 	l.byID.Store(id, container)
 
 	// Update in position store.
@@ -193,10 +210,10 @@ func (l *Locker) Delete(id uuid.UUID) error {
 		return errors.Errorf("no entity with id %s", id)
 	}
 
-	container.Lock.Lock()
-	defer container.Lock.Unlock()
+	container.GetRWMux().Lock()
+	defer container.GetRWMux().Unlock()
 
-	position := container.Entity.Position
+	position := container.GetEntity().Position
 
 	entitiesAtPosition, ok := l.byPos.Load(position)
 	if ok {
@@ -222,7 +239,7 @@ func (l *Locker) DeleteFromPos(id uuid.UUID, pos components.Position) error {
 func (l *Locker) DeleteAll() {
 	containers := l.byID.All()
 	for _, container := range containers {
-		l.Delete(container.Entity.ID)
+		l.Delete(container.GetEntity().ID)
 	}
 }
 
