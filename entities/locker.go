@@ -157,7 +157,7 @@ func (l Locker) GetByID(id uuid.UUID) (Container, error) {
 func (l Locker) GetByPosition(pos components.Position) ([]Container, error) {
 	entitiesAtPosition, ok := l.byPos.Load(pos)
 	if !ok {
-		return nil, nil
+		return nil, errors.Errorf("no position for %s", pos)
 	}
 
 	return entitiesAtPosition.All(), nil

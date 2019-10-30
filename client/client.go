@@ -58,7 +58,7 @@ func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, i
 
 	go handleMutators(locker, mutatorsQueue)
 	go handleTunnel(locker, tunnel, messagesQueue, mutatorsQueue)
-	go handleIntents(locker, tunnel.ID, intentsQueue, messagesQueue)
+	go handleIntents(tunnel.ID, intentsQueue, messagesQueue)
 
 	go pollTerminalEvents(uiEvents)
 
@@ -164,7 +164,6 @@ func handleTunnel(
 }
 
 func handleIntents(
-	locker *entities.Locker,
 	serverID uuid.UUID,
 	queue chan intents.Intent,
 	messagesQueue chan network.Message,
@@ -208,13 +207,12 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 	}
 
 	containers, err := locker.GetByPosition(targetPos)
-	if err != nil || len(containers) == 0 {
+	if len(containers) == 0 {
 		queue <- intents.Move{
 			SourceID: sourceID,
 			Position: targetPos,
 		}
 		queue <- intents.Perceive{SourceID: sourceID}
-		//panic(err)
 	} else {
 
 		isPassable := true
