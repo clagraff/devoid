@@ -2,7 +2,6 @@ package client
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -53,14 +52,6 @@ const (
 )
 
 func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, intentsQueue chan intents.Intent) {
-	f, err := os.OpenFile("client.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("error opening file: %v", err)
-	}
-	defer f.Close()
-
-	log.SetOutput(f)
-
 	messagesQueue := make(chan network.Message, 100)
 	mutatorsQueue := make(chan mutators.Mutator, 100)
 	uiEvents := make(chan termbox.Event, 100)
