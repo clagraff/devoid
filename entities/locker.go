@@ -11,45 +11,27 @@ import (
 )
 
 type Container interface {
-	GetEntity() *Entity
-	SetEntity(*Entity)
-
-	Lock()
-	Unlock()
-
-	RLock()
-	RUnlock()
+	Get() Entity
+	Set(Entity)
 }
 
-// Container serves to maintain both a single *Entity and a RWMutex
-// for access.
 type container struct {
 	mux    *sync.RWMutex
 	entity *Entity
 }
 
-func (c container) GetEntity() *Entity {
-	return c.entity
-}
-
-func (c *container) SetEntity(entity *Entity) {
-	c.entity = entity
-}
-
-func (c container) Lock() {
-	c.mux.Lock()
-}
-
-func (c container) Unlock() {
-	c.mux.Unlock()
-}
-
-func (c container) RLock() {
+func (c container) Get() Entity {
 	c.mux.RLock()
+	defer c.mux.RUnlock()
+
+	return *c.entity
 }
 
-func (c container) RUnlock() {
-	c.mux.RUnlock()
+func (c *container) Set(entity Entity) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	*c.entity = entity
 }
 
 func newContainer() Container {
@@ -90,12 +72,12 @@ func (c idContainer) Store(id uuid.UUID, container Container) {
 
 // All returns a list of Container stored in this map.
 // Modifications to the map while this function runs may impact the results.
-func (c idContainer) All() []Container {
-	allContainers := make([]Container, 0)
+func (c idContainer) All() []Entity {
+	allContainers := make([]Entity, 0)
 
 	ranger := func(key, value interface{}) bool {
 		if ec, ok := value.(Container); ok {
-			allContainers = append(allContainers, ec)
+			allContainers = append(allContainers, ec.Get())
 		}
 		return true
 	}
@@ -152,21 +134,20 @@ type Locker struct {
 	byPos *posContainer
 }
 
-func (l Locker) All() []Container {
+func (l Locker) All() []Entity {
 	return l.byID.All()
 }
 
-func (l Locker) GetByID(id uuid.UUID) (Container, error) {
+func (l Locker) GetByID(id uuid.UUID) (Entity, error) {
 	container, ok := l.byID.Load(id)
 	if !ok {
-		return nil, errors.Errorf("no entity with id %s", id)
+		return Entity{}, errors.Errorf("no entity with id %s", id)
 	}
 
-	return container, nil
+	return container.Get(), nil
 }
 
-// TODO: Return list of sync.Locker
-func (l Locker) GetByPosition(pos components.Position) ([]Container, error) {
+func (l Locker) GetByPosition(pos components.Position) ([]Entity, error) {
 	entitiesAtPosition, ok := l.byPos.Load(pos)
 	if !ok {
 		return nil, errors.Errorf("no position for %s", pos)
@@ -182,15 +163,12 @@ func (l *Locker) Set(entity Entity) error {
 	container, ok := l.byID.Load(id)
 	if !ok {
 		container = newContainer()
-		container.SetEntity(&entity)
+		container.Set(entity)
 	}
-
-	container.Lock()
-	defer container.Unlock()
 
 	// Grab old version. Check if position differs.
 
-	oldEntity := container.GetEntity()
+	oldEntity := container.Get()
 	oldPos := oldEntity.Position
 
 	// If position changed, remove from old pos.
@@ -203,7 +181,7 @@ func (l *Locker) Set(entity Entity) error {
 	}
 
 	// Update entity contents in container. Update in ID store.
-	container.SetEntity(&entity)
+	container.Set(entity)
 	l.byID.Store(id, container)
 
 	// Update in position store.
@@ -226,10 +204,7 @@ func (l *Locker) Delete(id uuid.UUID) error {
 		return errors.Errorf("no entity with id %s", id)
 	}
 
-	container.Lock()
-	defer container.Unlock()
-
-	position := container.GetEntity().Position
+	position := container.Get().Position
 
 	entitiesAtPosition, ok := l.byPos.Load(position)
 	if ok {
@@ -253,9 +228,9 @@ func (l *Locker) DeleteFromPos(id uuid.UUID, pos components.Position) error {
 }
 
 func (l *Locker) DeleteAll() {
-	containers := l.byID.All()
-	for _, container := range containers {
-		l.Delete(container.GetEntity().ID)
+	currentEntities := l.byID.All()
+	for _, e := range currentEntities {
+		l.Delete(e.ID)
 	}
 }
 

@@ -78,14 +78,10 @@ func handleSubscribe(
 	tunnel network.Tunnel,
 	subscriberQueue chan pubsub.Subscriber,
 ) {
-	container, err := locker.GetByID(tunnel.ID)
+	entity, err := locker.GetByID(tunnel.ID)
 	if err != nil {
 		panic(err)
 	}
-	container.RLock()
-	defer container.RUnlock()
-
-	entity := container.GetEntity()
 
 	subscribers := []pubsub.Subscriber{
 		pubsub.MakeSubscriber(

@@ -56,13 +56,10 @@ type MoveTo struct {
 }
 
 func (moveTo MoveTo) Execute(locker *entities.Locker) {
-	container, err := locker.GetByID(moveTo.SourceID)
+	entity, err := locker.GetByID(moveTo.SourceID)
 	if err != nil {
 		panic(err)
 	}
-	container.RLock()
-	entity := *container.GetEntity()
-	container.RUnlock()
 
 	entity.Position.X = moveTo.Position.X
 	entity.Position.Y = moveTo.Position.Y

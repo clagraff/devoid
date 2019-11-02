@@ -61,14 +61,11 @@ type Move struct {
 }
 
 func (move Move) Compute(locker *entities.Locker) ([]actions.Action, []pubsub.Notification) {
-	sourceContainer, err := locker.GetByID(move.SourceID)
+	sourceEntity, err := locker.GetByID(move.SourceID)
 	if err != nil {
 		panic("could not locate entity")
 	}
-	sourceContainer.RLock()
-	defer sourceContainer.RUnlock()
 
-	sourceEntity := sourceContainer.GetEntity()
 	xDiff := float64(sourceEntity.Position.X - move.Position.X)
 	yDiff := float64(sourceEntity.Position.Y - move.Position.Y)
 
@@ -76,17 +73,15 @@ func (move Move) Compute(locker *entities.Locker) ([]actions.Action, []pubsub.No
 		panic(errs.Errorf("desired Move position is too far away"))
 	}
 
-	containersAtPosition, _ := locker.GetByPosition(move.Position)
+	entitiesAtPosition, _ := locker.GetByPosition(move.Position)
 
-	for _, container := range containersAtPosition {
-		if container.GetEntity() == sourceContainer.GetEntity() {
+	for _, entity := range entitiesAtPosition {
+		if entity.ID == sourceEntity.ID {
 			panic("cannot move to where you are already at")
 		}
-		container.RLock()
-		if !container.GetEntity().Spatial.Stackable {
+		if !entity.Spatial.Stackable {
 			return nil, nil
 		}
-		container.RUnlock()
 	}
 
 	moveTo := actions.MoveTo{
@@ -123,17 +118,13 @@ type Info struct {
 }
 
 func (info Info) Compute(locker *entities.Locker) ([]actions.Action, []pubsub.Notification) {
-	sourceContainer, err := locker.GetByID(info.SourceID)
+	sourceEntity, err := locker.GetByID(info.SourceID)
 	if err != nil {
 		panic("compute info went wrong")
 	}
-	sourceContainer.RLock()
-	defer sourceContainer.RUnlock()
-
-	sourceEntity := sourceContainer.GetEntity()
 
 	inform := actions.SetEntity{
-		Entity: *sourceEntity,
+		Entity: sourceEntity,
 	}
 
 	notifications := []pubsub.Notification{
@@ -151,15 +142,12 @@ type Perceive struct {
 }
 
 func (command Perceive) Compute(locker *entities.Locker) ([]actions.Action, []pubsub.Notification) {
-	sourceContainer, err := locker.GetByID(command.SourceID)
+	sourceEntity, err := locker.GetByID(command.SourceID)
 	if err != nil {
 		fmt.Printf("%+v\n", err)
 		os.Exit(1)
 	}
-	sourceContainer.RLock()
-	sourceEntity := sourceContainer.GetEntity()
 	sourcePosition := sourceEntity.Position
-	sourceContainer.RUnlock()
 
 	visibility := 5
 	minX := sourcePosition.X - visibility
@@ -172,15 +160,13 @@ func (command Perceive) Compute(locker *entities.Locker) ([]actions.Action, []pu
 
 	for x := minX; x <= maxX; x++ {
 		for y := minY; y <= maxY; y++ {
-			containers, _ := locker.GetByPosition(components.Position{x, y})
+			entitiesAtPosition, _ := locker.GetByPosition(components.Position{x, y})
 
-			for _, container := range containers {
-				container.RLock()
+			for _, e := range entitiesAtPosition {
 				muts = append(
 					muts,
-					actions.SetEntity{Entity: *container.GetEntity()},
+					actions.SetEntity{Entity: e},
 				)
-				container.RUnlock()
 			}
 		}
 	}
@@ -209,21 +195,16 @@ func (command OpenSpatial) Compute(locker *entities.Locker) ([]actions.Action, [
 		panic("cannot open yourself I think")
 	}
 
-	sourceContainer, err := locker.GetByID(command.SourceID)
+	_, err := locker.GetByID(command.SourceID)
 	if err != nil {
 		panic("compute info went wrong")
 	}
-	sourceContainer.RLock()
-	defer sourceContainer.RUnlock()
 
-	targetContainer, err := locker.GetByID(command.TargetID)
+	targetEntity, err := locker.GetByID(command.TargetID)
 	if err != nil {
 		panic("compute OpenSpatial went wrong")
 	}
-	targetContainer.RLock()
-	defer targetContainer.RUnlock()
 
-	targetEntity := targetContainer.GetEntity()
 	// If target is not toggleable, do nothing.
 	if !targetEntity.Spatial.Toggleable {
 		return nil, nil
@@ -235,7 +216,7 @@ func (command OpenSpatial) Compute(locker *entities.Locker) ([]actions.Action, [
 	}
 
 	mutate := actions.SetStackability{
-		Entity:       *targetEntity,
+		Entity:       targetEntity,
 		Stackability: true,
 	}
 
@@ -259,23 +240,15 @@ type CloseSpatial struct {
 }
 
 func (command CloseSpatial) Compute(locker *entities.Locker) ([]actions.Action, []pubsub.Notification) {
-	sourceContainer, err := locker.GetByID(command.SourceID)
+	sourceEntity, err := locker.GetByID(command.SourceID)
 	if err != nil {
 		panic("compute info went wrong")
 	}
-	sourceContainer.RLock()
-	defer sourceContainer.RUnlock()
 
-	sourceEntity := sourceContainer.GetEntity()
-
-	targetContainer, err := locker.GetByID(command.TargetID)
+	targetEntity, err := locker.GetByID(command.TargetID)
 	if err != nil {
 		panic("compute info went wrong")
 	}
-	targetContainer.RLock()
-	defer targetContainer.RUnlock()
-
-	targetEntity := targetContainer.GetEntity()
 
 	// If target is not toggleable, do nothing.
 	if !targetEntity.Spatial.Toggleable {
@@ -288,7 +261,7 @@ func (command CloseSpatial) Compute(locker *entities.Locker) ([]actions.Action, 
 	}
 
 	mutate := actions.SetStackability{
-		Entity:       *sourceEntity,
+		Entity:       sourceEntity,
 		Stackability: false,
 	}
 
