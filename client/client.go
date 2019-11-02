@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/clagraff/devoid/commands"
 	"github.com/clagraff/devoid/components"
 	"github.com/clagraff/devoid/entities"
-	"github.com/clagraff/devoid/intents"
 	"github.com/clagraff/devoid/mutators"
 	"github.com/clagraff/devoid/network"
 
@@ -51,14 +51,14 @@ const (
 	left
 )
 
-func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, intentsQueue chan intents.Intent) {
+func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, commandsQueue chan commands.Command) {
 	messagesQueue := make(chan network.Message, 100)
 	mutatorsQueue := make(chan mutators.Mutator, 100)
 	uiEvents := make(chan termbox.Event, 100)
 
 	go handleMutators(locker, mutatorsQueue)
 	go handleTunnel(locker, tunnel, messagesQueue, mutatorsQueue)
-	go handleIntents(tunnel.ID, intentsQueue, messagesQueue)
+	go handleCommands(tunnel.ID, commandsQueue, messagesQueue)
 
 	go pollTerminalEvents(uiEvents)
 
@@ -81,13 +81,13 @@ func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, i
 				close(uiEvents)
 				return
 			} else if ev.Key == termbox.KeyArrowUp {
-				moveTo(locker, entityID, up, intentsQueue)
+				moveTo(locker, entityID, up, commandsQueue)
 			} else if ev.Key == termbox.KeyArrowDown {
-				moveTo(locker, entityID, down, intentsQueue)
+				moveTo(locker, entityID, down, commandsQueue)
 			} else if ev.Key == termbox.KeyArrowLeft {
-				moveTo(locker, entityID, left, intentsQueue)
+				moveTo(locker, entityID, left, commandsQueue)
 			} else if ev.Key == termbox.KeyArrowRight {
-				moveTo(locker, entityID, right, intentsQueue)
+				moveTo(locker, entityID, right, commandsQueue)
 			}
 
 		case _ = <-ticker.C:
@@ -163,20 +163,20 @@ func handleTunnel(
 	}
 }
 
-func handleIntents(
+func handleCommands(
 	serverID uuid.UUID,
-	queue chan intents.Intent,
+	queue chan commands.Command,
 	messagesQueue chan network.Message,
 ) {
-	for intent := range queue {
+	for command := range queue {
 		messagesQueue <- network.MakeMessage(
 			serverID,
-			intent,
+			command,
 		)
 	}
 }
 
-func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue chan intents.Intent) {
+func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue chan commands.Command) {
 	sourceContainer, err := locker.GetByID(sourceID)
 	if err != nil {
 		fmt.Printf("%+v\n", err)
@@ -208,11 +208,11 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 
 	containers, err := locker.GetByPosition(targetPos)
 	if len(containers) == 0 {
-		queue <- intents.Move{
+		queue <- commands.Move{
 			SourceID: sourceID,
 			Position: targetPos,
 		}
-		queue <- intents.Perceive{SourceID: sourceID}
+		queue <- commands.Perceive{SourceID: sourceID}
 	} else {
 
 		isPassable := true
@@ -227,7 +227,7 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 					return
 				}
 
-				queue <- intents.OpenSpatial{
+				queue <- commands.OpenSpatial{
 					SourceID: sourceID,
 					TargetID: targetEntity.ID,
 				}
@@ -237,11 +237,11 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 		}
 
 		if isPassable {
-			queue <- intents.Move{
+			queue <- commands.Move{
 				SourceID: sourceID,
 				Position: targetPos,
 			}
-			queue <- intents.Perceive{SourceID: sourceID}
+			queue <- commands.Perceive{SourceID: sourceID}
 		}
 	}
 }

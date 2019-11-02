@@ -1,4 +1,4 @@
-package intents
+package commands
 
 import (
 	"encoding/json"
@@ -15,41 +15,41 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-type Intent interface {
+type Command interface {
 	Compute(*entities.Locker) ([]mutators.Mutator, []pubsub.Notification)
 }
 
-func Unmarshal(kind string, bytes []byte) (Intent, error) {
+func Unmarshal(kind string, bytes []byte) (Command, error) {
 	var err error
-	var intent Intent
+	var command Command
 
 	switch kind {
-	case "intents.Move":
-		moveIntent := Move{}
-		err = json.Unmarshal(bytes, &moveIntent)
-		intent = moveIntent
-	case "intents.Info":
-		infoIntent := Info{}
-		err = json.Unmarshal(bytes, &infoIntent)
-		intent = infoIntent
-	case "intents.Perceive":
-		perceiveIntent := Perceive{}
-		err = json.Unmarshal(bytes, &perceiveIntent)
-		intent = perceiveIntent
-	case "intents.OpenSpatial":
-		openSpatialIntent := OpenSpatial{}
-		err = json.Unmarshal(bytes, &openSpatialIntent)
-		intent = openSpatialIntent
-	case "intents.CloseSpatial":
-		closeSpatialIntent := CloseSpatial{}
-		err = json.Unmarshal(bytes, &closeSpatialIntent)
-		intent = closeSpatialIntent
+	case "commands.Move":
+		moveCommand := Move{}
+		err = json.Unmarshal(bytes, &moveCommand)
+		command = moveCommand
+	case "commands.Info":
+		infoCommand := Info{}
+		err = json.Unmarshal(bytes, &infoCommand)
+		command = infoCommand
+	case "commands.Perceive":
+		perceiveCommand := Perceive{}
+		err = json.Unmarshal(bytes, &perceiveCommand)
+		command = perceiveCommand
+	case "commands.OpenSpatial":
+		openSpatialCommand := OpenSpatial{}
+		err = json.Unmarshal(bytes, &openSpatialCommand)
+		command = openSpatialCommand
+	case "commands.CloseSpatial":
+		closeSpatialCommand := CloseSpatial{}
+		err = json.Unmarshal(bytes, &closeSpatialCommand)
+		command = closeSpatialCommand
 	default:
-		return nil, errs.New("invalid intent kind: " + kind)
+		return nil, errs.New("invalid command kind: " + kind)
 	}
 
 	if err == nil {
-		return intent, err
+		return command, err
 	}
 
 	return nil, errs.New(err)
@@ -150,8 +150,8 @@ type Perceive struct {
 	SourceID uuid.UUID
 }
 
-func (intent Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
-	sourceContainer, err := locker.GetByID(intent.SourceID)
+func (command Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+	sourceContainer, err := locker.GetByID(command.SourceID)
 	if err != nil {
 		fmt.Printf("%+v\n", err)
 		os.Exit(1)
@@ -187,11 +187,11 @@ func (intent Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []p
 
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
-			Type:     intent.SourceID,
+			Type:     command.SourceID,
 			Mutators: []mutators.Mutator{mutators.ClearAllEntities{}},
 		},
 		pubsub.Notification{
-			Type:     intent.SourceID,
+			Type:     command.SourceID,
 			Mutators: muts,
 		},
 	}
@@ -204,19 +204,19 @@ type OpenSpatial struct {
 	TargetID uuid.UUID
 }
 
-func (intent OpenSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
-	if uuid.Equal(intent.SourceID, intent.TargetID) {
+func (command OpenSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+	if uuid.Equal(command.SourceID, command.TargetID) {
 		panic("cannot open yourself I think")
 	}
 
-	sourceContainer, err := locker.GetByID(intent.SourceID)
+	sourceContainer, err := locker.GetByID(command.SourceID)
 	if err != nil {
 		panic("compute info went wrong")
 	}
 	sourceContainer.RLock()
 	defer sourceContainer.RUnlock()
 
-	targetContainer, err := locker.GetByID(intent.TargetID)
+	targetContainer, err := locker.GetByID(command.TargetID)
 	if err != nil {
 		panic("compute OpenSpatial went wrong")
 	}
@@ -241,11 +241,11 @@ func (intent OpenSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator, 
 
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
-			Type:     intent.TargetID,
+			Type:     command.TargetID,
 			Mutators: []mutators.Mutator{mutate},
 		},
 		pubsub.Notification{
-			Type:     intent.SourceID,
+			Type:     command.SourceID,
 			Mutators: []mutators.Mutator{mutate},
 		},
 	}
@@ -258,8 +258,8 @@ type CloseSpatial struct {
 	TargetID uuid.UUID
 }
 
-func (intent CloseSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
-	sourceContainer, err := locker.GetByID(intent.SourceID)
+func (command CloseSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+	sourceContainer, err := locker.GetByID(command.SourceID)
 	if err != nil {
 		panic("compute info went wrong")
 	}
@@ -268,7 +268,7 @@ func (intent CloseSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator,
 
 	sourceEntity := sourceContainer.GetEntity()
 
-	targetContainer, err := locker.GetByID(intent.TargetID)
+	targetContainer, err := locker.GetByID(command.TargetID)
 	if err != nil {
 		panic("compute info went wrong")
 	}
@@ -294,7 +294,7 @@ func (intent CloseSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator,
 
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
-			Type:     intent.TargetID,
+			Type:     command.TargetID,
 			Mutators: []mutators.Mutator{mutate},
 		},
 	}
