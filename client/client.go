@@ -96,11 +96,8 @@ func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, c
 				panic(err)
 			}
 
-			containers := locker.All()
-			for _, container := range containers {
-				container.RLock()
-				entity := container.GetEntity()
-
+			allEntities := locker.All()
+			for _, entity := range allEntities {
 				char := '@'
 				if entity.Spatial.Toggleable {
 					char = '+'
@@ -118,7 +115,6 @@ func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, c
 					termbox.ColorWhite,
 					termbox.ColorBlack,
 				)
-				container.RUnlock()
 			}
 
 			c.Render()
@@ -177,15 +173,11 @@ func handleCommands(
 }
 
 func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue chan commands.Command) {
-	sourceContainer, err := locker.GetByID(sourceID)
+	sourceEntity, err := locker.GetByID(sourceID)
 	if err != nil {
 		fmt.Printf("%+v\n", err)
 		os.Exit(1)
 	}
-	sourceContainer.RLock()
-	defer sourceContainer.RUnlock()
-
-	sourceEntity := sourceContainer.GetEntity()
 
 	x := sourceEntity.Position.X
 	y := sourceEntity.Position.Y
@@ -206,8 +198,8 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 		Y: y,
 	}
 
-	containers, err := locker.GetByPosition(targetPos)
-	if len(containers) == 0 {
+	entitiesAtPosition, err := locker.GetByPosition(targetPos)
+	if len(entitiesAtPosition) == 0 {
 		queue <- commands.Move{
 			SourceID: sourceID,
 			Position: targetPos,
@@ -217,10 +209,7 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 
 		isPassable := true
 
-		for _, container := range containers {
-			container.RLock()
-			targetEntity := container.GetEntity()
-
+		for _, targetEntity := range entitiesAtPosition {
 			if !targetEntity.Spatial.Stackable {
 				isPassable = false
 				if !targetEntity.Spatial.Toggleable {
@@ -232,8 +221,6 @@ func moveTo(locker *entities.Locker, sourceID uuid.UUID, dir direction, queue ch
 					TargetID: targetEntity.ID,
 				}
 			}
-
-			container.RUnlock()
 		}
 
 		if isPassable {
