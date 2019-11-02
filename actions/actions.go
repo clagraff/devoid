@@ -1,4 +1,4 @@
-package mutators
+package actions
 
 import (
 	"encoding/json"
@@ -10,41 +10,41 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-type Mutator interface {
+type Action interface {
 	Mutate(*entities.Locker)
 }
 
-func Unmarshal(kind string, bytes []byte) (Mutator, error) {
+func Unmarshal(kind string, bytes []byte) (Action, error) {
 	var err error
-	var mutator Mutator
+	var action Action
 
 	switch kind {
-	case "mutators.MoveTo":
-		moveToMutator := MoveTo{}
-		err = json.Unmarshal(bytes, &moveToMutator)
-		mutator = moveToMutator
-	case "mutators.MoveFrom":
-		moveFromMutator := MoveFrom{}
-		err = json.Unmarshal(bytes, &moveFromMutator)
-		mutator = moveFromMutator
-	case "mutators.SetEntity":
-		setEntityMutator := SetEntity{}
-		err = json.Unmarshal(bytes, &setEntityMutator)
-		mutator = setEntityMutator
-	case "mutators.ClearAllEntities":
+	case "actions.MoveTo":
+		moveToAction := MoveTo{}
+		err = json.Unmarshal(bytes, &moveToAction)
+		action = moveToAction
+	case "actions.MoveFrom":
+		moveFromAction := MoveFrom{}
+		err = json.Unmarshal(bytes, &moveFromAction)
+		action = moveFromAction
+	case "actions.SetEntity":
+		setEntityAction := SetEntity{}
+		err = json.Unmarshal(bytes, &setEntityAction)
+		action = setEntityAction
+	case "actions.ClearAllEntities":
 		mut := ClearAllEntities{}
 		err = json.Unmarshal(bytes, &mut)
-		mutator = mut
-	case "mutators.SetStackability":
+		action = mut
+	case "actions.SetStackability":
 		mut := SetStackability{}
 		err = json.Unmarshal(bytes, &mut)
-		mutator = mut
+		action = mut
 	default:
-		return nil, errs.Errorf("invalid mutator kind: %s", kind)
+		return nil, errs.Errorf("invalid action kind: %s", kind)
 	}
 
 	if err == nil {
-		return mutator, err
+		return action, err
 	}
 
 	return nil, errs.New(err)

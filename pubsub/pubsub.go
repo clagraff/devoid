@@ -1,12 +1,12 @@
 package pubsub
 
 import (
-	"github.com/clagraff/devoid/mutators"
+	"github.com/clagraff/devoid/actions"
 )
 
 type Notification struct {
-	Type     interface{}
-	Mutators []mutators.Mutator
+	Type    interface{}
+	Actions []actions.Action
 }
 
 type Subscriber interface {

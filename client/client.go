@@ -5,10 +5,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/clagraff/devoid/actions"
 	"github.com/clagraff/devoid/commands"
 	"github.com/clagraff/devoid/components"
 	"github.com/clagraff/devoid/entities"
-	"github.com/clagraff/devoid/mutators"
 	"github.com/clagraff/devoid/network"
 
 	termbox "github.com/nsf/termbox-go"
@@ -53,11 +53,11 @@ const (
 
 func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, commandsQueue chan commands.Command) {
 	messagesQueue := make(chan network.Message, 100)
-	mutatorsQueue := make(chan mutators.Mutator, 100)
+	actionsQueue := make(chan actions.Action, 100)
 	uiEvents := make(chan termbox.Event, 100)
 
-	go handleMutators(locker, mutatorsQueue)
-	go handleTunnel(locker, tunnel, messagesQueue, mutatorsQueue)
+	go handleActions(locker, actionsQueue)
+	go handleTunnel(locker, tunnel, messagesQueue, actionsQueue)
 	go handleCommands(tunnel.ID, commandsQueue, messagesQueue)
 
 	go pollTerminalEvents(uiEvents)
@@ -77,7 +77,7 @@ func Serve(entityID uuid.UUID, locker *entities.Locker, tunnel network.Tunnel, c
 		case ev := <-uiEvents:
 			if ev.Ch == 'q' {
 				close(messagesQueue)
-				close(mutatorsQueue)
+				close(actionsQueue)
 				close(uiEvents)
 				return
 			} else if ev.Key == termbox.KeyArrowUp {
@@ -134,9 +134,9 @@ func pollTerminalEvents(queue chan termbox.Event) {
 	}
 }
 
-func handleMutators(locker *entities.Locker, queue chan mutators.Mutator) {
-	for mutator := range queue {
-		mutator.Mutate(locker)
+func handleActions(locker *entities.Locker, queue chan actions.Action) {
+	for action := range queue {
+		action.Mutate(locker)
 	}
 }
 
@@ -144,19 +144,19 @@ func handleTunnel(
 	locker *entities.Locker,
 	tunnel network.Tunnel,
 	messagesQueue chan network.Message,
-	mutatorsQueue chan mutators.Mutator,
+	actionsQueue chan actions.Action,
 ) {
 	for {
 		select {
 		case message := <-messagesQueue:
 			tunnel.Outgoing <- message
 		case message := <-tunnel.Incoming:
-			mutator, err := mutators.Unmarshal(message.ContentType, message.Content)
+			action, err := actions.Unmarshal(message.ContentType, message.Content)
 			if err != nil {
 				panic(err)
 			}
 
-			mutatorsQueue <- mutator
+			actionsQueue <- action
 		default:
 			// no-op
 		}

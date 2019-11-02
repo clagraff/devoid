@@ -6,9 +6,9 @@ import (
 	"math"
 	"os"
 
+	"github.com/clagraff/devoid/actions"
 	"github.com/clagraff/devoid/components"
 	"github.com/clagraff/devoid/entities"
-	"github.com/clagraff/devoid/mutators"
 	"github.com/clagraff/devoid/pubsub"
 
 	errs "github.com/go-errors/errors"
@@ -16,7 +16,7 @@ import (
 )
 
 type Command interface {
-	Compute(*entities.Locker) ([]mutators.Mutator, []pubsub.Notification)
+	Compute(*entities.Locker) ([]actions.Action, []pubsub.Notification)
 }
 
 func Unmarshal(kind string, bytes []byte) (Command, error) {
@@ -60,7 +60,7 @@ type Move struct {
 	Position components.Position
 }
 
-func (move Move) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+func (move Move) Compute(locker *entities.Locker) ([]actions.Action, []pubsub.Notification) {
 	sourceContainer, err := locker.GetByID(move.SourceID)
 	if err != nil {
 		panic("could not locate entity")
@@ -89,29 +89,29 @@ func (move Move) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.
 		container.RUnlock()
 	}
 
-	moveTo := mutators.MoveTo{
+	moveTo := actions.MoveTo{
 		SourceID: move.SourceID,
 		Position: move.Position,
 	}
 
-	moveFrom := mutators.MoveFrom{
+	moveFrom := actions.MoveFrom{
 		SourceID: move.SourceID,
 		Position: sourceEntity.Position,
 	}
 
-	serverMutations := []mutators.Mutator{moveTo, moveFrom}
+	serverMutations := []actions.Action{moveTo, moveFrom}
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
-			Type:     move.Position,
-			Mutators: []mutators.Mutator{moveTo},
+			Type:    move.Position,
+			Actions: []actions.Action{moveTo},
 		},
 		pubsub.Notification{
-			Type:     sourceEntity.Position,
-			Mutators: []mutators.Mutator{moveFrom},
+			Type:    sourceEntity.Position,
+			Actions: []actions.Action{moveFrom},
 		},
 		pubsub.Notification{
-			Type:     sourceEntity.ID,
-			Mutators: []mutators.Mutator{moveTo, moveFrom},
+			Type:    sourceEntity.ID,
+			Actions: []actions.Action{moveTo, moveFrom},
 		},
 	}
 
@@ -122,7 +122,7 @@ type Info struct {
 	SourceID uuid.UUID
 }
 
-func (info Info) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+func (info Info) Compute(locker *entities.Locker) ([]actions.Action, []pubsub.Notification) {
 	sourceContainer, err := locker.GetByID(info.SourceID)
 	if err != nil {
 		panic("compute info went wrong")
@@ -132,14 +132,14 @@ func (info Info) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.
 
 	sourceEntity := sourceContainer.GetEntity()
 
-	inform := mutators.SetEntity{
+	inform := actions.SetEntity{
 		Entity: *sourceEntity,
 	}
 
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
-			Type:     info.SourceID,
-			Mutators: []mutators.Mutator{inform},
+			Type:    info.SourceID,
+			Actions: []actions.Action{inform},
 		},
 	}
 
@@ -150,7 +150,7 @@ type Perceive struct {
 	SourceID uuid.UUID
 }
 
-func (command Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+func (command Perceive) Compute(locker *entities.Locker) ([]actions.Action, []pubsub.Notification) {
 	sourceContainer, err := locker.GetByID(command.SourceID)
 	if err != nil {
 		fmt.Printf("%+v\n", err)
@@ -168,7 +168,7 @@ func (command Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []
 	minY := sourcePosition.Y - visibility
 	maxY := sourcePosition.Y + visibility
 
-	muts := make([]mutators.Mutator, 0)
+	muts := make([]actions.Action, 0)
 
 	for x := minX; x <= maxX; x++ {
 		for y := minY; y <= maxY; y++ {
@@ -178,7 +178,7 @@ func (command Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []
 				container.RLock()
 				muts = append(
 					muts,
-					mutators.SetEntity{Entity: *container.GetEntity()},
+					actions.SetEntity{Entity: *container.GetEntity()},
 				)
 				container.RUnlock()
 			}
@@ -187,12 +187,12 @@ func (command Perceive) Compute(locker *entities.Locker) ([]mutators.Mutator, []
 
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
-			Type:     command.SourceID,
-			Mutators: []mutators.Mutator{mutators.ClearAllEntities{}},
+			Type:    command.SourceID,
+			Actions: []actions.Action{actions.ClearAllEntities{}},
 		},
 		pubsub.Notification{
-			Type:     command.SourceID,
-			Mutators: muts,
+			Type:    command.SourceID,
+			Actions: muts,
 		},
 	}
 
@@ -204,7 +204,7 @@ type OpenSpatial struct {
 	TargetID uuid.UUID
 }
 
-func (command OpenSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+func (command OpenSpatial) Compute(locker *entities.Locker) ([]actions.Action, []pubsub.Notification) {
 	if uuid.Equal(command.SourceID, command.TargetID) {
 		panic("cannot open yourself I think")
 	}
@@ -234,23 +234,23 @@ func (command OpenSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator,
 		return nil, nil
 	}
 
-	mutate := mutators.SetStackability{
+	mutate := actions.SetStackability{
 		Entity:       *targetEntity,
 		Stackability: true,
 	}
 
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
-			Type:     command.TargetID,
-			Mutators: []mutators.Mutator{mutate},
+			Type:    command.TargetID,
+			Actions: []actions.Action{mutate},
 		},
 		pubsub.Notification{
-			Type:     command.SourceID,
-			Mutators: []mutators.Mutator{mutate},
+			Type:    command.SourceID,
+			Actions: []actions.Action{mutate},
 		},
 	}
 
-	return []mutators.Mutator{mutate}, notifications
+	return []actions.Action{mutate}, notifications
 }
 
 type CloseSpatial struct {
@@ -258,7 +258,7 @@ type CloseSpatial struct {
 	TargetID uuid.UUID
 }
 
-func (command CloseSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator, []pubsub.Notification) {
+func (command CloseSpatial) Compute(locker *entities.Locker) ([]actions.Action, []pubsub.Notification) {
 	sourceContainer, err := locker.GetByID(command.SourceID)
 	if err != nil {
 		panic("compute info went wrong")
@@ -287,15 +287,15 @@ func (command CloseSpatial) Compute(locker *entities.Locker) ([]mutators.Mutator
 		return nil, nil
 	}
 
-	mutate := mutators.SetStackability{
+	mutate := actions.SetStackability{
 		Entity:       *sourceEntity,
 		Stackability: false,
 	}
 
 	notifications := []pubsub.Notification{
 		pubsub.Notification{
-			Type:     command.TargetID,
-			Mutators: []mutators.Mutator{mutate},
+			Type:    command.TargetID,
+			Actions: []actions.Action{mutate},
 		},
 	}
 

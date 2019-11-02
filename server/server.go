@@ -3,9 +3,9 @@ package server
 import (
 	"fmt"
 
+	"github.com/clagraff/devoid/actions"
 	"github.com/clagraff/devoid/commands"
 	"github.com/clagraff/devoid/entities"
-	"github.com/clagraff/devoid/mutators"
 	"github.com/clagraff/devoid/network"
 	"github.com/clagraff/devoid/pubsub"
 
@@ -90,10 +90,10 @@ func handleSubscribe(
 	subscribers := []pubsub.Subscriber{
 		pubsub.MakeSubscriber(
 			func(notification pubsub.Notification) bool {
-				for _, mutator := range notification.Mutators {
+				for _, action := range notification.Actions {
 					tunnel.Outgoing <- network.MakeMessage(
 						tunnel.ID,
-						mutator,
+						action,
 					)
 				}
 				return true
@@ -179,6 +179,6 @@ func handleCommands(
 	}
 }
 
-func handleCommand(locker *entities.Locker, command commands.Command) ([]mutators.Mutator, []pubsub.Notification) {
+func handleCommand(locker *entities.Locker, command commands.Command) ([]actions.Action, []pubsub.Notification) {
 	return command.Compute(locker)
 }
