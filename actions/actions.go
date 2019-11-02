@@ -11,7 +11,7 @@ import (
 )
 
 type Action interface {
-	Mutate(*entities.Locker)
+	Execute(*entities.Locker)
 }
 
 func Unmarshal(kind string, bytes []byte) (Action, error) {
@@ -55,7 +55,7 @@ type MoveTo struct {
 	Position components.Position
 }
 
-func (moveTo MoveTo) Mutate(locker *entities.Locker) {
+func (moveTo MoveTo) Execute(locker *entities.Locker) {
 	container, err := locker.GetByID(moveTo.SourceID)
 	if err != nil {
 		panic(err)
@@ -75,7 +75,7 @@ type MoveFrom struct {
 	Position components.Position
 }
 
-func (moveFrom MoveFrom) Mutate(locker *entities.Locker) {
+func (moveFrom MoveFrom) Execute(locker *entities.Locker) {
 	locker.DeleteFromPos(moveFrom.SourceID, moveFrom.Position)
 }
 
@@ -83,7 +83,7 @@ type SetEntity struct {
 	Entity entities.Entity
 }
 
-func (setEntity SetEntity) Mutate(locker *entities.Locker) {
+func (setEntity SetEntity) Execute(locker *entities.Locker) {
 	locker.Set(setEntity.Entity)
 }
 
@@ -92,7 +92,7 @@ type SetStackability struct {
 	Stackability bool
 }
 
-func (m SetStackability) Mutate(locker *entities.Locker) {
+func (m SetStackability) Execute(locker *entities.Locker) {
 	entity := m.Entity
 	entity.Spatial.Stackable = m.Stackability
 	locker.Set(entity)
@@ -100,6 +100,6 @@ func (m SetStackability) Mutate(locker *entities.Locker) {
 
 type ClearAllEntities struct{}
 
-func (_ ClearAllEntities) Mutate(locker *entities.Locker) {
+func (_ ClearAllEntities) Execute(locker *entities.Locker) {
 	locker.DeleteAll()
 }

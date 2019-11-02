@@ -170,7 +170,7 @@ func handleCommands(
 	for command := range queue {
 		serverMutations, notifications := handleCommand(locker, command)
 		for _, mutation := range serverMutations {
-			mutation.Mutate(locker)
+			mutation.Execute(locker)
 		}
 
 		for _, notification := range notifications {

@@ -136,7 +136,7 @@ func pollTerminalEvents(queue chan termbox.Event) {
 
 func handleActions(locker *entities.Locker, queue chan actions.Action) {
 	for action := range queue {
-		action.Mutate(locker)
+		action.Execute(locker)
 	}
 }
 
