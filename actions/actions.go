@@ -1,4 +1,4 @@
-package mutators
+package actions
 
 import (
 	"encoding/json"
@@ -10,41 +10,41 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-type Mutator interface {
-	Mutate(*entities.Locker)
+type Action interface {
+	Execute(*entities.Locker)
 }
 
-func Unmarshal(kind string, bytes []byte) (Mutator, error) {
+func Unmarshal(kind string, bytes []byte) (Action, error) {
 	var err error
-	var mutator Mutator
+	var action Action
 
 	switch kind {
-	case "mutators.MoveTo":
-		moveToMutator := MoveTo{}
-		err = json.Unmarshal(bytes, &moveToMutator)
-		mutator = moveToMutator
-	case "mutators.MoveFrom":
-		moveFromMutator := MoveFrom{}
-		err = json.Unmarshal(bytes, &moveFromMutator)
-		mutator = moveFromMutator
-	case "mutators.SetEntity":
-		setEntityMutator := SetEntity{}
-		err = json.Unmarshal(bytes, &setEntityMutator)
-		mutator = setEntityMutator
-	case "mutators.ClearAllEntities":
+	case "actions.MoveTo":
+		moveToAction := MoveTo{}
+		err = json.Unmarshal(bytes, &moveToAction)
+		action = moveToAction
+	case "actions.MoveFrom":
+		moveFromAction := MoveFrom{}
+		err = json.Unmarshal(bytes, &moveFromAction)
+		action = moveFromAction
+	case "actions.SetEntity":
+		setEntityAction := SetEntity{}
+		err = json.Unmarshal(bytes, &setEntityAction)
+		action = setEntityAction
+	case "actions.ClearAllEntities":
 		mut := ClearAllEntities{}
 		err = json.Unmarshal(bytes, &mut)
-		mutator = mut
-	case "mutators.SetStackability":
+		action = mut
+	case "actions.SetStackability":
 		mut := SetStackability{}
 		err = json.Unmarshal(bytes, &mut)
-		mutator = mut
+		action = mut
 	default:
-		return nil, errs.Errorf("invalid mutator kind: %s", kind)
+		return nil, errs.Errorf("invalid action kind: %s", kind)
 	}
 
 	if err == nil {
-		return mutator, err
+		return action, err
 	}
 
 	return nil, errs.New(err)
@@ -55,7 +55,7 @@ type MoveTo struct {
 	Position components.Position
 }
 
-func (moveTo MoveTo) Mutate(locker *entities.Locker) {
+func (moveTo MoveTo) Execute(locker *entities.Locker) {
 	container, err := locker.GetByID(moveTo.SourceID)
 	if err != nil {
 		panic(err)
@@ -75,7 +75,7 @@ type MoveFrom struct {
 	Position components.Position
 }
 
-func (moveFrom MoveFrom) Mutate(locker *entities.Locker) {
+func (moveFrom MoveFrom) Execute(locker *entities.Locker) {
 	locker.DeleteFromPos(moveFrom.SourceID, moveFrom.Position)
 }
 
@@ -83,7 +83,7 @@ type SetEntity struct {
 	Entity entities.Entity
 }
 
-func (setEntity SetEntity) Mutate(locker *entities.Locker) {
+func (setEntity SetEntity) Execute(locker *entities.Locker) {
 	locker.Set(setEntity.Entity)
 }
 
@@ -92,7 +92,7 @@ type SetStackability struct {
 	Stackability bool
 }
 
-func (m SetStackability) Mutate(locker *entities.Locker) {
+func (m SetStackability) Execute(locker *entities.Locker) {
 	entity := m.Entity
 	entity.Spatial.Stackable = m.Stackability
 	locker.Set(entity)
@@ -100,6 +100,6 @@ func (m SetStackability) Mutate(locker *entities.Locker) {
 
 type ClearAllEntities struct{}
 
-func (_ ClearAllEntities) Mutate(locker *entities.Locker) {
+func (_ ClearAllEntities) Execute(locker *entities.Locker) {
 	locker.DeleteAll()
 }

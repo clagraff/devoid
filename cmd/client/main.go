@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/clagraff/devoid/client"
+	"github.com/clagraff/devoid/commands"
 	"github.com/clagraff/devoid/entities"
-	"github.com/clagraff/devoid/intents"
 	"github.com/clagraff/devoid/network"
 
 	errs "github.com/go-errors/errors"
@@ -51,9 +51,9 @@ func run(cfg clientConfig) {
 	defer closeFn()
 
 	locker := entities.MakeLocker()
-	intentsQueue := make(chan intents.Intent, 100)
+	commandsQueue := make(chan commands.Command, 100)
 
-	client.Serve(cfg.EntityID, &locker, tunnel, intentsQueue)
+	client.Serve(cfg.EntityID, &locker, tunnel, commandsQueue)
 }
 
 func main() {

@@ -3,9 +3,9 @@ package server
 import (
 	"fmt"
 
+	"github.com/clagraff/devoid/actions"
+	"github.com/clagraff/devoid/commands"
 	"github.com/clagraff/devoid/entities"
-	"github.com/clagraff/devoid/intents"
-	"github.com/clagraff/devoid/mutators"
 	"github.com/clagraff/devoid/network"
 	"github.com/clagraff/devoid/pubsub"
 
@@ -13,13 +13,13 @@ import (
 )
 
 func Serve(locker *entities.Locker, tunnels chan network.Tunnel) {
-	intentsQueue := make(chan intents.Intent, 100)
+	commandsQueue := make(chan commands.Command, 100)
 	notificationsQueue := make(chan pubsub.Notification, 100)
 	messagesQueue := make(chan network.Message, 100)
 	subscriberQueue := make(chan pubsub.Subscriber, 100)
 
-	go handleTunnels(locker, tunnels, messagesQueue, intentsQueue, subscriberQueue)
-	go handleIntents(locker, intentsQueue, notificationsQueue)
+	go handleTunnels(locker, tunnels, messagesQueue, commandsQueue, subscriberQueue)
+	go handleCommands(locker, commandsQueue, notificationsQueue)
 	go handleNotifications(
 		notificationsQueue,
 		messagesQueue,
@@ -33,7 +33,7 @@ func handleTunnels(
 	locker *entities.Locker,
 	tunnels chan network.Tunnel,
 	messagesQueue chan network.Message,
-	intentsQueue chan intents.Intent,
+	commandsQueue chan commands.Command,
 	subscriberQueue chan pubsub.Subscriber,
 ) {
 	availableTunnels := make(map[uuid.UUID]network.Tunnel)
@@ -42,7 +42,7 @@ func handleTunnels(
 		case tunnel := <-tunnels:
 			availableTunnels[tunnel.ID] = tunnel
 			handleSubscribe(locker, tunnel, subscriberQueue)
-			intentsQueue <- intents.Perceive{SourceID: tunnel.ID}
+			commandsQueue <- commands.Perceive{SourceID: tunnel.ID}
 		case message := <-messagesQueue:
 			clientID := message.ClientID
 			if tunnel, ok := availableTunnels[clientID]; ok {
@@ -59,13 +59,13 @@ func handleTunnels(
 			case _ = <-tunnel.Closed:
 				delete(availableTunnels, tunnel.ID)
 			case message := <-tunnel.Incoming:
-				intent, err := intents.Unmarshal(message.ContentType, message.Content)
+				command, err := commands.Unmarshal(message.ContentType, message.Content)
 				if err != nil {
 					tunnel.Closed <- struct{}{}
 					panic(err)
 				}
 
-				intentsQueue <- intent
+				commandsQueue <- command
 			default:
 				// no-op
 			}
@@ -90,10 +90,10 @@ func handleSubscribe(
 	subscribers := []pubsub.Subscriber{
 		pubsub.MakeSubscriber(
 			func(notification pubsub.Notification) bool {
-				for _, mutator := range notification.Mutators {
+				for _, action := range notification.Actions {
 					tunnel.Outgoing <- network.MakeMessage(
 						tunnel.ID,
-						mutator,
+						action,
 					)
 				}
 				return true
@@ -162,15 +162,15 @@ func handleNotification(
 	}
 }
 
-func handleIntents(
+func handleCommands(
 	locker *entities.Locker,
-	queue chan intents.Intent,
+	queue chan commands.Command,
 	notificationQueue chan pubsub.Notification,
 ) {
-	for intent := range queue {
-		serverMutations, notifications := handleIntent(locker, intent)
+	for command := range queue {
+		serverMutations, notifications := handleCommand(locker, command)
 		for _, mutation := range serverMutations {
-			mutation.Mutate(locker)
+			mutation.Execute(locker)
 		}
 
 		for _, notification := range notifications {
@@ -179,6 +179,6 @@ func handleIntents(
 	}
 }
 
-func handleIntent(locker *entities.Locker, intent intents.Intent) ([]mutators.Mutator, []pubsub.Notification) {
-	return intent.Compute(locker)
+func handleCommand(locker *entities.Locker, command commands.Command) ([]actions.Action, []pubsub.Notification) {
+	return command.Compute(locker)
 }
